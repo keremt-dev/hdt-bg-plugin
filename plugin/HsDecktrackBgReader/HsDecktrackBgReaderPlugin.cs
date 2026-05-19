@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
+using System.Threading;
 using System.Windows.Controls;
 using Hearthstone_Deck_Tracker.API;
 using Hearthstone_Deck_Tracker.Plugins;
@@ -17,9 +18,13 @@ namespace HsDecktrackBgReader
         public MenuItem MenuItem => null;
 
         private const int HttpPort = 9876;
+        private const int PollIntervalMs = 1500;
         private EntityDumper _dumper;
         private LocalHttpServer _server;
         private BgStateExtractor _extractor;
+        private Timer _poller;
+        private string _lastServedJson;       // last non-null snapshot we pushed
+        private int _pollerBusy;              // 0/1 sentinel — re-entrant Timer guard
 
         public void OnLoad()
         {
@@ -44,6 +49,13 @@ namespace HsDecktrackBgReader
 
                 _dumper.Write("subscribed_events", new { events = new[] { "OnGameStart", "OnTurnStart", "OnModeChanged" } });
 
+                // The HDT events above do NOT fire during the BG hero-pick
+                // window, which is exactly when the user wants Live data.
+                // Drive a small poll loop instead — it just re-runs the
+                // extractor; it does not write the verbose entity dump.
+                _poller = new Timer(_ => PollTick(), null, PollIntervalMs, PollIntervalMs);
+                _dumper.Write("poll_timer_started", new { intervalMs = PollIntervalMs });
+
                 RefreshLobbyState("OnLoad");
             }
             catch (Exception ex)
@@ -57,6 +69,7 @@ namespace HsDecktrackBgReader
             try
             {
                 _dumper?.Write("plugin_unload", new { });
+                _poller?.Dispose();
                 _server?.Dispose();
                 _dumper?.Dispose();
             }
@@ -119,15 +132,26 @@ namespace HsDecktrackBgReader
             try
             {
                 var game = Hearthstone_Deck_Tracker.Core.Game;
+                var modeName = mode.ToString();
                 _dumper.Write("event_OnModeChanged", new
                 {
-                    mode = mode.ToString(),
+                    mode = modeName,
                     currentMode = SafeProp(game, "CurrentGameMode"),
                     currentGameType = SafeProp(game, "CurrentGameType"),
                     isBattlegrounds = SafeProp(game, "IsBattlegroundsMatch"),
                 });
-                DumpGameSnapshot("OnModeChanged:" + mode);
-                RefreshLobbyState("OnModeChanged:" + mode);
+                DumpGameSnapshot("OnModeChanged:" + modeName);
+                // BG starts at BACON (queue/lobby) and continues into GAMEPLAY.
+                // When we leave both, drop the cached snapshot so the browser
+                // doesn't show a stale lobby from a previous match.
+                if (modeName != "BACON" && modeName != "GAMEPLAY")
+                {
+                    ClearServedState("OnModeChanged:" + modeName);
+                }
+                else
+                {
+                    RefreshLobbyState("OnModeChanged:" + modeName);
+                }
             }
             catch (Exception ex)
             {
@@ -135,18 +159,45 @@ namespace HsDecktrackBgReader
             }
         }
 
+        private void PollTick()
+        {
+            // Single-flight: skip if a previous tick is still running.
+            if (Interlocked.Exchange(ref _pollerBusy, 1) == 1) return;
+            try { RefreshLobbyState("timer"); }
+            catch (Exception ex) { SafeLog("PollTick failed", ex); }
+            finally { Interlocked.Exchange(ref _pollerBusy, 0); }
+        }
+
+        /// <summary>
+        /// Try a fresh extraction. If it produces JSON, push it AND remember
+        /// it as the last good snapshot. If it produces null, keep whatever
+        /// the server is already serving — a missed read shouldn't blank out
+        /// a perfectly valid lobby state. Only ClearServedState wipes the
+        /// snapshot, and that only fires when we leave BG mode.
+        /// </summary>
         private void RefreshLobbyState(string trigger)
         {
             try
             {
                 var json = _extractor?.TryBuildJson();
+                if (json == null) return;
+                if (json == _lastServedJson) return;          // no diff, save bandwidth
+                _lastServedJson = json;
                 _server?.SetState(json);
-                _dumper?.Write("lobby_state_pushed", new { trigger, hasState = json != null, length = json?.Length ?? 0 });
+                _dumper?.Write("lobby_state_pushed", new { trigger, length = json.Length });
             }
             catch (Exception ex)
             {
                 SafeLog("RefreshLobbyState failed", ex);
             }
+        }
+
+        private void ClearServedState(string reason)
+        {
+            if (_lastServedJson == null) return;
+            _lastServedJson = null;
+            _server?.SetState(null);
+            _dumper?.Write("lobby_state_cleared", new { reason });
         }
 
         private void DumpGameSnapshot(string trigger)
