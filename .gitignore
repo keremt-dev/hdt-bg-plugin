@@ -9,7 +9,11 @@ packages/
 
 # Plugin artifacts
 *.dll
-!**/refs/*.dll
+*.exe
+
+# HDT binaries copied by the developer into refs/ — never commit
+**/refs/*.dll
+**/refs/*.exe
 
 # Plugin local dumps
 **/dump-*.jsonl
