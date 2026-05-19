@@ -116,6 +116,14 @@
       </div>
     </div>
 
+    <label class="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border hairline bg-[#11101a] cursor-pointer select-none">
+      <span class="flex items-center gap-2">
+        <span id="liveDot" class="w-2 h-2 rounded-full bg-[var(--ink-2)]" title="offline"></span>
+        <span class="text-[12px]">Live <span class="text-[var(--ink-2)]" id="liveStatus">— HDT plugin'inden oto-okuma</span></span>
+      </span>
+      <input type="checkbox" id="liveToggle" class="accent-[var(--purple)]">
+    </label>
+
     <button id="analyze" class="w-full py-3.5 rounded-xl bg-[var(--gold)] text-black font-semibold tracking-tight hover:bg-[#ffd97a] transition active:scale-[.99] disabled:opacity-40 disabled:cursor-not-allowed">
       Analyze lobby
     </button>
@@ -166,6 +174,9 @@ const state = {
   data: null,
   comps: null,
   strategies: {},
+  liveMode: false,
+  liveHandle: null,
+  liveLastJson: '',
 };
 
 // ─────────────────────────────────────────── TRIBES UI
@@ -310,6 +321,105 @@ function flash(btn, msg){
   const old = btn.textContent; btn.textContent = msg; btn.classList.add('!bg-[#ff7a8a]');
   setTimeout(()=>{ btn.textContent = old; btn.classList.remove('!bg-[#ff7a8a]'); }, 1300);
 }
+
+// ─────────────────────────────────────────── LIVE MODE (HDT plugin → localhost)
+const LIVE_URL = 'http://localhost:9876/lobby';
+const LIVE_INTERVAL_MS = 2000;
+const liveDot = document.getElementById('liveDot');
+const liveStatus = document.getElementById('liveStatus');
+const liveToggle = document.getElementById('liveToggle');
+
+const LIVE_DOT_COLORS = {
+  off:     'var(--ink-2)',
+  waiting: 'var(--purple-glow)',
+  online:  'var(--good)',
+  error:   'var(--bad)',
+};
+function setLiveDot(kind, label){
+  liveDot.style.background = LIVE_DOT_COLORS[kind] || LIVE_DOT_COLORS.off;
+  liveDot.title = label || kind;
+  liveStatus.textContent = label ? '— ' + label : '— HDT plugin\'inden oto-okuma';
+}
+
+async function pollLive(){
+  let r;
+  try {
+    r = await fetch(LIVE_URL, { cache: 'no-store' });
+  } catch {
+    setLiveDot('error', 'sidecar offline (HDT plugin çalışıyor mu?)');
+    return;
+  }
+  if (r.status === 204){ setLiveDot('waiting', 'lobby bekleniyor'); return; }
+  if (!r.ok){ setLiveDot('error', `sidecar HTTP ${r.status}`); return; }
+
+  let body;
+  try { body = await r.text(); }
+  catch { setLiveDot('error', 'sidecar yanıtı okunamadı'); return; }
+
+  if (body === state.liveLastJson){ setLiveDot('online', 'aktif'); return; }
+  state.liveLastJson = body;
+
+  let lobby;
+  try { lobby = JSON.parse(body); }
+  catch { setLiveDot('error', 'sidecar JSON parse hatası'); return; }
+
+  applyLiveLobby(lobby);
+  setLiveDot('online', 'aktif');
+}
+
+function applyLiveLobby(lobby){
+  const bannedArr = Array.isArray(lobby?.banned) ? lobby.banned : [];
+  const heroesArr = Array.isArray(lobby?.heroes) ? lobby.heroes : [];
+
+  // Tribes: keep only known tribe IDs, drop unknowns.
+  const validTribeIds = new Set(TRIBES.map(t=>t.id));
+  const nextBanned = new Set(bannedArr.filter(id => validTribeIds.has(id)));
+
+  // Heroes: 4 slots, map cardId → HEROES entry, unknown IDs become null.
+  const nextHeroes = [null, null, null, null];
+  heroesArr.slice(0, 4).forEach((id, i) => {
+    const found = HEROES.find(h => h.id === id);
+    nextHeroes[i] = found || null;
+  });
+
+  // Only re-render the affected sub-tree if it actually changed.
+  if (!setsEqual(state.banned, nextBanned)){
+    state.banned = nextBanned;
+    renderTribes();
+    document.getElementById('bannedCount').textContent = state.banned.size;
+  }
+  if (!heroSlotsEqual(state.heroes, nextHeroes)){
+    state.heroes = nextHeroes;
+    renderSlots();
+  }
+}
+
+function setsEqual(a, b){
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+function heroSlotsEqual(a, b){
+  for (let i=0;i<4;i++){
+    const aid = a[i]?.id || null, bid = b[i]?.id || null;
+    if (aid !== bid) return false;
+  }
+  return true;
+}
+
+liveToggle.addEventListener('change', () => {
+  state.liveMode = liveToggle.checked;
+  if (state.liveMode){
+    setLiveDot('waiting', 'bağlanılıyor');
+    pollLive();                                  // immediate first poll
+    state.liveHandle = setInterval(pollLive, LIVE_INTERVAL_MS);
+  } else {
+    clearInterval(state.liveHandle);
+    state.liveHandle = null;
+    state.liveLastJson = '';
+    setLiveDot('off', 'kapalı');
+  }
+});
 
 function skeleton(){
   return `

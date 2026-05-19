@@ -52,3 +52,33 @@ extraction into a small localhost HTTP service that `index.html` polls.
    - `bg_viewmodel_types` listing HDT's own BG view models — these are gold,
      they tell us exactly which class to reach into in Stage 2.
 4. Record findings in `plugin/SPIKE_NOTES.md`.
+
+## Test the browser side without HDT
+
+The Live toggle in `index.html` only needs *something* on
+`http://localhost:9876/lobby`. A canned mock is provided:
+
+```
+node plugin/test-sidecar/mock-sidecar.js
+```
+
+Then open `index.html` in a browser and flip the **Live** switch. The mock
+cycles through a few canned lobby states every ~6 seconds; you should see
+tribe chips going banned and hero slots filling in without doing anything in
+the UI yourself. Stop the mock with Ctrl-C.
+
+## Contract (what the real plugin must serve in Stage 2)
+
+- `GET http://localhost:9876/lobby`
+- `200 application/json` when a lobby is known:
+  ```json
+  { "banned": [14, 17, 23], "heroes": ["TB_BaconShop_HERO_36", "BG31_HERO_802"] }
+  ```
+  - `banned`: array of Firestone tribe IDs (subset of
+    `{11, 14, 15, 17, 20, 23, 24, 26, 28, 29}`)
+  - `heroes`: array of Hearthstone `heroCardId` strings, length 1–4, order is
+    the order shown to the player.
+- `204 No Content` when the plugin is alive but no lobby data yet.
+- Must send `Access-Control-Allow-Origin: *` so a browser opening `index.html`
+  via `file://` can fetch it.
+
