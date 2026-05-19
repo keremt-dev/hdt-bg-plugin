@@ -36,12 +36,34 @@ namespace HsDecktrackBgReader
         private static readonly Regex HeroCardIdRegex =
             new Regex(@"^(TB_BaconShop_HERO_\d+|BG\d+_HERO_\d+)$", RegexOptions.Compiled);
 
+        // Canonical hero prefix matcher used for skin / transform normalization.
+        // Heroes ship with variant cardIds: TB_BaconShop_HERO_57_SKIN_L (skin),
+        // TB_BaconShop_HERO_59t (Aranna's transformed form). Both should map
+        // back to the canonical id index.html knows about.
+        private static readonly Regex HeroCanonicalPrefixRegex =
+            new Regex(@"^(TB_BaconShop_HERO_\d+|BG\d+_HERO_\d+)", RegexOptions.Compiled);
+
         private readonly EntityDumper _dumper;
         private bool _deepProbeDone;
+
+        // Hero accumulator: OfferedHeroDbfIds shrinks as the player rerolls
+        // or picks, but for the analyzer we want the FULL original offer set.
+        // We union DbfIds across all extracts during a single BG lifetime and
+        // reset on ResetLobby().
+        private readonly HashSet<int> _heroAccumSet = new HashSet<int>();
+        private readonly List<int> _heroAccumOrder = new List<int>();
+        private const int MaxOfferedHeroes = 4;
 
         public BgStateExtractor(EntityDumper dumper)
         {
             _dumper = dumper;
+        }
+
+        /// <summary>Drop hero accumulator. Called when we leave BG mode.</summary>
+        public void ResetLobby()
+        {
+            _heroAccumSet.Clear();
+            _heroAccumOrder.Clear();
         }
 
         /// <summary>
@@ -103,20 +125,34 @@ namespace HsDecktrackBgReader
 
         private List<string> ExtractOfferedHeroes(object game)
         {
-            var heroes = HeroesFromPickState(game);
-            if (heroes.Count > 0) return heroes;
+            // Update the accumulator from the latest live offer set, then
+            // resolve cardIds from whatever we've seen across this lobby.
+            UpdateHeroAccumulatorFromPickState(game);
 
+            if (_heroAccumOrder.Count > 0)
+            {
+                var resolved = new List<string>();
+                var seenCanonical = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var dbfId in _heroAccumOrder)
+                {
+                    var cardId = NormalizeHeroCardId(DbfIdToCardId(dbfId));
+                    if (string.IsNullOrEmpty(cardId)) continue;
+                    if (seenCanonical.Add(cardId)) resolved.Add(cardId);
+                    if (resolved.Count >= MaxOfferedHeroes) break;
+                }
+                if (resolved.Count > 0) return resolved;
+            }
+
+            // Mid-game or accumulator empty: fall back to entity walk.
             return HeroesFromEntities(game);
         }
 
-        private List<string> HeroesFromPickState(object game)
+        private void UpdateHeroAccumulatorFromPickState(object game)
         {
-            var result = new List<string>();
             var pickState = GetMember(game, "BattlegroundsHeroPickState");
-            if (pickState == null) return result;
-
+            if (pickState == null) return;
             var offered = GetMember(pickState, "OfferedHeroDbfIds") as IEnumerable;
-            if (offered == null) return result;
+            if (offered == null) return;
 
             foreach (var item in offered)
             {
@@ -125,11 +161,31 @@ namespace HsDecktrackBgReader
                 try { dbfId = Convert.ToInt32(item); }
                 catch { continue; }
                 if (dbfId <= 0) continue;
-
-                var cardId = DbfIdToCardId(dbfId);
-                if (!string.IsNullOrEmpty(cardId)) result.Add(cardId);
+                if (_heroAccumSet.Add(dbfId))
+                {
+                    _heroAccumOrder.Add(dbfId);
+                    if (_heroAccumOrder.Count > MaxOfferedHeroes)
+                    {
+                        // Defensive: never accumulate more than the cap. BG
+                        // offers ≤4; if we somehow see more (e.g. across two
+                        // lobbies), keep the earliest ones.
+                        _heroAccumOrder.RemoveRange(MaxOfferedHeroes, _heroAccumOrder.Count - MaxOfferedHeroes);
+                    }
+                }
             }
-            return result;
+        }
+
+        /// <summary>
+        /// Map BG hero skins and transformed forms back to their canonical
+        /// cardId so the browser's HEROES table can find them. Examples:
+        ///   TB_BaconShop_HERO_57_SKIN_L → TB_BaconShop_HERO_57 (Alexstrasza skin)
+        ///   TB_BaconShop_HERO_59t      → TB_BaconShop_HERO_59 (Aranna transformed)
+        /// </summary>
+        private static string NormalizeHeroCardId(string cardId)
+        {
+            if (string.IsNullOrEmpty(cardId)) return cardId;
+            var m = HeroCanonicalPrefixRegex.Match(cardId);
+            return m.Success ? m.Value : cardId;
         }
 
         private List<string> HeroesFromEntities(object game)
@@ -252,6 +308,25 @@ namespace HsDecktrackBgReader
                             error = err,
                         });
                     }
+                    // Enumerate parameterless static methods too — that's where
+                    // BattlegroundsUtils.GetAvailableRaces() and friends live.
+                    foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.NonPublic))
+                    {
+                        if (m.IsSpecialName) continue;                // skip property/event accessors
+                        if (m.GetParameters().Length != 0) continue;  // skip anything with args
+                        var nameLower = m.Name.ToLowerInvariant();
+                        if (nameLower.IndexOf("race") < 0
+                            && nameLower.IndexOf("tribe") < 0
+                            && nameLower.IndexOf("ban") < 0
+                            && nameLower.IndexOf("available") < 0) continue;
+                        staticGetters.Add(new
+                        {
+                            name = m.Name + "()",
+                            type = m.ReturnType.FullName,
+                            value = "<method — not invoked>",
+                            error = (string)null,
+                        });
+                    }
                     if (staticGetters.Count > 0)
                         hits.Add(new { type = t.FullName, members = staticGetters });
                 }
@@ -285,57 +360,65 @@ namespace HsDecktrackBgReader
 
         private HashSet<int> PlayableFromBgDb(object game)
         {
-            // BattlegroundsDb.Races (HashSet<int>) is HDT's authoritative list
-            // of playable tribes for the current lobby — but the BattlegroundsDb
-            // instance hides behind several access patterns depending on the
-            // HDT version. Try them all and return the first non-empty Races.
+            // Spike found the right hooks in HDT 1.52.7:
+            //   • BattlegroundsUtils has methods to compute the lobby's race
+            //     set (the type holds a per-game cache keyed by Guid).
+            //   • BattlegroundsMinionsViewModel.Db is a non-null static
+            //     BattlegroundsDb instance.
+            // We try the per-lobby method first (gives bans for THIS game),
+            // then fall back to the global DB Races (which may include all
+            // tribes regardless of bans — usable but less precise).
             var asm = typeof(Hearthstone_Deck_Tracker.API.GameEvents).Assembly;
 
-            // a) Direct property on Core.Game
-            var candidate = GetMember(game, "BattlegroundsDb");
-            var races = RacesFrom(candidate, "Core.Game.BattlegroundsDb");
-            if (races != null) return races;
-
-            // b) Static singletons on the BattlegroundsDb type itself
-            var bgDbType = asm.GetType("Hearthstone_Deck_Tracker.Hearthstone.BattlegroundsDb");
-            if (bgDbType != null)
+            // a) BattlegroundsUtils.GetAvailableRaces() — per-lobby
+            var utilsType = asm.GetType("Hearthstone_Deck_Tracker.Hearthstone.BattlegroundsUtils");
+            if (utilsType != null)
             {
-                foreach (var n in new[] { "Instance", "Default", "Current" })
+                foreach (var methodName in new[] { "GetAvailableRaces", "GetAvailableTribes", "GetCurrentRaces" })
                 {
-                    var inst = GetMember(bgDbType, n);
-                    races = RacesFrom(inst, "BattlegroundsDb." + n);
-                    if (races != null) return races;
+                    HashSet<int> races = null;
+                    try
+                    {
+                        var methods = utilsType.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.NonPublic);
+                        foreach (var m in methods)
+                        {
+                            if (m.Name != methodName) continue;
+                            var ps = m.GetParameters();
+                            object result = null;
+                            if (ps.Length == 0)
+                            {
+                                result = m.Invoke(null, null);
+                            }
+                            else if (ps.Length == 1 && ps[0].HasDefaultValue)
+                            {
+                                result = m.Invoke(null, new object[] { ps[0].DefaultValue });
+                            }
+                            if (result != null) { races = TryAsIntSet(result); if (races != null) break; }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _dumper?.Write("races_invoke_error", new { method = "BattlegroundsUtils." + methodName, error = ex.GetBaseException().Message });
+                    }
+                    if (races != null) { _dumper?.Write("races_source", new { from = "BattlegroundsUtils." + methodName + "()", count = races.Count }); return races; }
                 }
             }
 
-            // c) BattlegroundsDbSingleton.Instance (HDT also has this wrapper)
-            var singletonType = asm.GetType("Hearthstone_Deck_Tracker.Utility.Battlegrounds.BattlegroundsDbSingleton");
-            if (singletonType != null)
+            // b) BattlegroundsMinionsViewModel.Db.Races — static singleton-ish
+            var minionsVmType = asm.GetType("Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Minions.BattlegroundsMinionsViewModel");
+            if (minionsVmType != null)
             {
-                foreach (var n in new[] { "Instance", "Default", "Current", "Get" })
-                {
-                    var inst = GetMember(singletonType, n);
-                    if (inst == null)
-                    {
-                        // Try as method
-                        try
-                        {
-                            var m = singletonType.GetMethod(n, BindingFlags.Public | BindingFlags.Static | BindingFlags.NonPublic);
-                            if (m != null && m.GetParameters().Length == 0) inst = m.Invoke(null, null);
-                        }
-                        catch { }
-                    }
-                    if (inst == null) continue;
-                    races = RacesFrom(inst, "BattlegroundsDbSingleton." + n);
-                    if (races != null) return races;
-                    // Maybe singleton has an inner .Instance field/property
-                    var inner = GetMember(inst, "Instance") ?? GetMember(inst, "Value") ?? GetMember(inst, "Db");
-                    if (inner != null)
-                    {
-                        races = RacesFrom(inner, "BattlegroundsDbSingleton." + n + ".(inner)");
-                        if (races != null) return races;
-                    }
-                }
+                var db = GetMember(minionsVmType, "Db");
+                var races = RacesFrom(db, "BattlegroundsMinionsViewModel.Db");
+                if (races != null) return races;
+            }
+
+            // c) Direct property on Core.Game (defensive)
+            var direct = GetMember(game, "BattlegroundsDb");
+            if (direct != null)
+            {
+                var races = RacesFrom(direct, "Core.Game.BattlegroundsDb");
+                if (races != null) return races;
             }
 
             // d) HearthMirror lobby info provider — per-lobby tribe set may
@@ -343,7 +426,6 @@ namespace HsDecktrackBgReader
             var providerType = asm.GetType("Hearthstone_Deck_Tracker.Hearthstone.HearthMirrorBattlegroundsLobbyInfoProvider");
             if (providerType != null)
             {
-                // Look for a static instance
                 foreach (var n in new[] { "Instance", "Default", "Current" })
                 {
                     var inst = GetMember(providerType, n);
@@ -352,8 +434,8 @@ namespace HsDecktrackBgReader
                     if (lobby == null) continue;
                     foreach (var prop in new[] { "AvailableRaces", "Races", "PlayableRaces" })
                     {
-                        races = TryAsIntSet(GetMember(lobby, prop));
-                        if (races != null) { _dumper?.Write("races_source", new { from = "HearthMirrorBattlegroundsLobbyInfoProvider." + n + ".BattlegroundsLobbyInfo." + prop }); return races; }
+                        var races = TryAsIntSet(GetMember(lobby, prop));
+                        if (races != null) { _dumper?.Write("races_source", new { from = "HearthMirrorBattlegroundsLobbyInfoProvider." + n + ".BattlegroundsLobbyInfo." + prop, count = races.Count }); return races; }
                     }
                 }
             }

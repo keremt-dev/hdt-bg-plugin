@@ -194,6 +194,7 @@ namespace HsDecktrackBgReader
 
         private void ClearServedState(string reason)
         {
+            _extractor?.ResetLobby();
             if (_lastServedJson == null) return;
             _lastServedJson = null;
             _server?.SetState(null);
