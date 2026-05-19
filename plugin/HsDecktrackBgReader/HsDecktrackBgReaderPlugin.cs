@@ -6,6 +6,11 @@ using System.Windows.Controls;
 using Hearthstone_Deck_Tracker.API;
 using Hearthstone_Deck_Tracker.Plugins;
 
+// In Release the VerboseDump const is false, so the `if (VerboseDump) ...`
+// branches are unreachable by design. We don't want to read those warnings
+// every time we build Release.
+#pragma warning disable 162    // unreachable code
+
 namespace HsDecktrackBgReader
 {
     public class HsDecktrackBgReaderPlugin : IPlugin
@@ -19,6 +24,16 @@ namespace HsDecktrackBgReader
 
         private const int HttpPort = 9876;
         private const int PollIntervalMs = 1500;
+
+        // Verbose dumping (full entity snapshots, reflection probes, BG view
+        // model catalogues, deep race probe) was the whole point of the
+        // spike. Release builds don't need it — the extractor knows its
+        // targets — and the JSONL would grow to tens of MB per session.
+#if DEBUG
+        private const bool VerboseDump = true;
+#else
+        private const bool VerboseDump = false;
+#endif
         private EntityDumper _dumper;
         private LocalHttpServer _server;
         private BgStateExtractor _extractor;
@@ -84,6 +99,8 @@ namespace HsDecktrackBgReader
             try
             {
                 _dumper?.Write("manual_dump_button", new { });
+                // The button is a developer affordance — always dump verbose
+                // state regardless of build configuration when it's pressed.
                 DumpGameSnapshot("manual_button");
                 RefreshLobbyState("manual_button");
             }
@@ -104,7 +121,7 @@ namespace HsDecktrackBgReader
             try
             {
                 _dumper.Write("event_OnGameStart", new { });
-                DumpGameSnapshot("OnGameStart");
+                if (VerboseDump) DumpGameSnapshot("OnGameStart");
                 RefreshLobbyState("OnGameStart");
             }
             catch (Exception ex)
@@ -118,7 +135,7 @@ namespace HsDecktrackBgReader
             try
             {
                 _dumper.Write("event_OnTurnStart", new { player = player.ToString() });
-                DumpGameSnapshot("OnTurnStart:" + player);
+                if (VerboseDump) DumpGameSnapshot("OnTurnStart:" + player);
                 RefreshLobbyState("OnTurnStart:" + player);
             }
             catch (Exception ex)
@@ -140,7 +157,7 @@ namespace HsDecktrackBgReader
                     currentGameType = SafeProp(game, "CurrentGameType"),
                     isBattlegrounds = SafeProp(game, "IsBattlegroundsMatch"),
                 });
-                DumpGameSnapshot("OnModeChanged:" + modeName);
+                if (VerboseDump) DumpGameSnapshot("OnModeChanged:" + modeName);
                 // BG starts at BACON (queue/lobby) and continues into GAMEPLAY.
                 // When we leave both, drop the cached snapshot so the browser
                 // doesn't show a stale lobby from a previous match.
