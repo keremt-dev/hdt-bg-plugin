@@ -10,26 +10,41 @@ extraction into a small localhost HTTP service that `index.html` polls.
 ## Prerequisites
 
 - Windows + Visual Studio 2019/2022 (or `msbuild` from Build Tools)
-- Hearthstone Deck Tracker installed locally — we need two of its binaries on disk
-- .NET Framework 4.7.2 Developer Pack
+- Hearthstone Deck Tracker installed locally (any normal install works —
+  the build script auto-discovers it)
+- .NET Framework 4.7.2 Developer Pack — install from
+  https://aka.ms/msbuild/developerpacks if `msbuild` complains about MSB3644
 
 ## Build
 
-1. Copy HDT references into `plugin/HsDecktrackBgReader/refs/`:
-   - `HearthstoneDeckTracker.exe`
-   - `HearthDb.dll`
+Just build the project — no manual setup. The `AutoStageHdtRefs` MSBuild
+target runs `stage-hdt-refs.ps1` before reference resolution, which finds
+the most recent HDT install on this machine and copies
+`HearthstoneDeckTracker.exe` + `HearthDb.dll` into `refs/`. Standard search
+order:
 
-   These usually live under `%LocalAppData%\HearthstoneDeckTracker\app-<version>\`
-   (Squirrel install). The `refs/` folder is intentionally `.gitignore`-d.
+1. `%LocalAppData%\HearthstoneDeckTracker\app-<latest>\` (Squirrel install — typical)
+2. `%ProgramFiles%\HearthstoneDeckTracker\`
+3. `%ProgramFiles(x86)%\HearthstoneDeckTracker\`
 
-2. Open `HsDecktrackBgReader.csproj` in Visual Studio and build **x86 Debug**, or:
+Open `HsDecktrackBgReader.csproj` in Visual Studio (**x86 / Debug**), or:
 
-   ```
-   msbuild plugin/HsDecktrackBgReader/HsDecktrackBgReader.csproj /p:Configuration=Debug /p:Platform=x86
-   ```
+```
+msbuild plugin/HsDecktrackBgReader/HsDecktrackBgReader.csproj /p:Configuration=Debug /p:Platform=x86
+```
 
-   The post-build target auto-copies the DLL to
-   `%AppData%\HearthstoneDeckTracker\Plugins\HsDecktrackBgReader\`.
+If HDT lives somewhere unusual, override the discovery:
+
+```
+msbuild HsDecktrackBgReader.csproj /p:HdtRoot=D:\Games\HDT\app-1.32.5
+```
+
+The Debug `AfterBuild` step then copies the built DLL into
+`%AppData%\HearthstoneDeckTracker\Plugins\HsDecktrackBgReader\` so HDT
+picks it up on next launch.
+
+The `refs/` folder is `.gitignore`-d — it gets re-staged on each clean
+build, and we never commit Blizzard-adjacent binaries.
 
 ## Enable in HDT
 

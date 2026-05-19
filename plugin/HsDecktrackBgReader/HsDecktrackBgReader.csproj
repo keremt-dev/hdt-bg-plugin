@@ -32,6 +32,13 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
+  <!--
+    HDT references: by default we point at refs/ next to the project. If
+    refs/ is empty (clean checkout) the AutoStageHdtRefs target below runs
+    stage-hdt-refs.ps1 to populate it from the locally-installed HDT.
+    Override the auto-discovery by setting HdtRoot, e.g.
+      msbuild HsDecktrackBgReader.csproj /p:HdtRoot=D:\Games\HDT\app-1.32.5
+  -->
   <ItemGroup>
     <Reference Include="HearthstoneDeckTracker">
       <HintPath>refs\HearthstoneDeckTracker.exe</HintPath>
@@ -60,6 +67,25 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
+  <!--
+    Auto-stage HDT reference binaries before MSBuild tries to resolve them.
+    Runs only when refs/ is missing or empty, so once it's populated subsequent
+    builds skip the script entirely. Pass HdtRoot as a property to override.
+  -->
+  <Target Name="AutoStageHdtRefs"
+          BeforeTargets="ResolveAssemblyReferences"
+          Condition="!Exists('$(MSBuildProjectDirectory)\refs\HearthstoneDeckTracker.exe') Or !Exists('$(MSBuildProjectDirectory)\refs\HearthDb.dll')">
+    <Message Importance="high" Text="refs/ missing HDT binaries — running stage-hdt-refs.ps1" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\stage-hdt-refs.ps1&quot; -RefsDir &quot;$(MSBuildProjectDirectory)\refs&quot; $(_HdtRootArg)"
+          ConsoleToMSBuild="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_StageOutput" />
+    </Exec>
+  </Target>
+  <PropertyGroup>
+    <_HdtRootArg Condition="'$(HdtRoot)' != ''">-HdtRoot &quot;$(HdtRoot)&quot;</_HdtRootArg>
+  </PropertyGroup>
+
   <Target Name="AfterBuild" Condition=" '$(Configuration)' == 'Debug' ">
     <ItemGroup>
       <PluginOut Include="$(TargetPath)" />
