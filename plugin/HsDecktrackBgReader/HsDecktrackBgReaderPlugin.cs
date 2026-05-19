@@ -121,6 +121,13 @@ namespace HsDecktrackBgReader
             try
             {
                 _dumper.Write("event_OnGameStart", new { });
+                // A new game means a fresh lobby — wipe the previous match's
+                // hero accumulator AND the cached snapshot. Without this the
+                // accumulator stays capped at the prior 4 heroes and the new
+                // offer set is silently rejected; the dedup also keeps
+                // serving stale JSON for tens of minutes. ClearServedState
+                // briefly answers 204 until the first new extract succeeds.
+                ClearServedState("OnGameStart");
                 if (VerboseDump) DumpGameSnapshot("OnGameStart");
                 RefreshLobbyState("OnGameStart");
             }

@@ -363,7 +363,22 @@ async function pollLive(){
     setLiveDot('error', 'sidecar offline (HDT plugin çalışıyor mu?)');
     return;
   }
-  if (r.status === 204){ setLiveDot('waiting', 'lobby bekleniyor'); return; }
+  if (r.status === 204){
+    // Plugin signalled an explicit clear (between BG matches or leaving BG
+    // mode). If we previously had a snapshot, wipe local UI so the user
+    // doesn't see the prior lobby's chips while waiting for the new one.
+    if (state.liveLastJson){
+      state.liveLastJson = '';
+      state.banned = new Set();
+      state.heroes = [null, null, null, null];
+      state.lastAutoAnalyzedSig = '';
+      renderTribes();
+      renderSlots();
+      document.getElementById('bannedCount').textContent = 0;
+    }
+    setLiveDot('waiting', 'lobby bekleniyor');
+    return;
+  }
   if (!r.ok){ setLiveDot('error', `sidecar HTTP ${r.status}`); return; }
 
   let body;
