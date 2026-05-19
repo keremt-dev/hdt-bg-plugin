@@ -114,19 +114,20 @@ namespace HsDecktrackBgReader
             }
         }
 
-        private void OnModeChanged()
+        private void OnModeChanged(Hearthstone_Deck_Tracker.Enums.Hearthstone.Mode mode)
         {
             try
             {
                 var game = Hearthstone_Deck_Tracker.Core.Game;
                 _dumper.Write("event_OnModeChanged", new
                 {
+                    mode = mode.ToString(),
                     currentMode = SafeProp(game, "CurrentGameMode"),
                     currentGameType = SafeProp(game, "CurrentGameType"),
                     isBattlegrounds = SafeProp(game, "IsBattlegroundsMatch"),
                 });
-                DumpGameSnapshot("OnModeChanged");
-                RefreshLobbyState("OnModeChanged");
+                DumpGameSnapshot("OnModeChanged:" + mode);
+                RefreshLobbyState("OnModeChanged:" + mode);
             }
             catch (Exception ex)
             {
