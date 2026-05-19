@@ -16,7 +16,10 @@ namespace HsDecktrackBgReader
         public Version Version => new Version(0, 1, 0);
         public MenuItem MenuItem => null;
 
+        private const int HttpPort = 9876;
         private EntityDumper _dumper;
+        private LocalHttpServer _server;
+        private BgStateExtractor _extractor;
 
         public void OnLoad()
         {
@@ -30,11 +33,18 @@ namespace HsDecktrackBgReader
 
                 _dumper.Write("plugin_load", new { version = Version.ToString(), dumpDir });
 
+                _extractor = new BgStateExtractor(_dumper);
+                _server = new LocalHttpServer(HttpPort);
+                _server.Start();
+                _dumper.Write("http_server_started", new { port = HttpPort });
+
                 GameEvents.OnGameStart.Add(OnGameStart);
                 GameEvents.OnTurnStart.Add(OnTurnStart);
                 GameEvents.OnModeChanged.Add(OnModeChanged);
 
                 _dumper.Write("subscribed_events", new { events = new[] { "OnGameStart", "OnTurnStart", "OnModeChanged" } });
+
+                RefreshLobbyState("OnLoad");
             }
             catch (Exception ex)
             {
@@ -47,6 +57,7 @@ namespace HsDecktrackBgReader
             try
             {
                 _dumper?.Write("plugin_unload", new { });
+                _server?.Dispose();
                 _dumper?.Dispose();
             }
             catch (Exception ex)
@@ -61,6 +72,7 @@ namespace HsDecktrackBgReader
             {
                 _dumper?.Write("manual_dump_button", new { });
                 DumpGameSnapshot("manual_button");
+                RefreshLobbyState("manual_button");
             }
             catch (Exception ex)
             {
@@ -80,6 +92,7 @@ namespace HsDecktrackBgReader
             {
                 _dumper.Write("event_OnGameStart", new { });
                 DumpGameSnapshot("OnGameStart");
+                RefreshLobbyState("OnGameStart");
             }
             catch (Exception ex)
             {
@@ -93,6 +106,7 @@ namespace HsDecktrackBgReader
             {
                 _dumper.Write("event_OnTurnStart", new { player = player.ToString() });
                 DumpGameSnapshot("OnTurnStart:" + player);
+                RefreshLobbyState("OnTurnStart:" + player);
             }
             catch (Exception ex)
             {
@@ -112,10 +126,25 @@ namespace HsDecktrackBgReader
                     isBattlegrounds = SafeProp(game, "IsBattlegroundsMatch"),
                 });
                 DumpGameSnapshot("OnModeChanged");
+                RefreshLobbyState("OnModeChanged");
             }
             catch (Exception ex)
             {
                 SafeLog("OnModeChanged failed", ex);
+            }
+        }
+
+        private void RefreshLobbyState(string trigger)
+        {
+            try
+            {
+                var json = _extractor?.TryBuildJson();
+                _server?.SetState(json);
+                _dumper?.Write("lobby_state_pushed", new { trigger, hasState = json != null, length = json?.Length ?? 0 });
+            }
+            catch (Exception ex)
+            {
+                SafeLog("RefreshLobbyState failed", ex);
             }
         }
 

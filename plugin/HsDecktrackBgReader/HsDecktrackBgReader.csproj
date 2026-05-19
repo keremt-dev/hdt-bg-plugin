@@ -55,6 +55,8 @@
   <ItemGroup>
     <Compile Include="HsDecktrackBgReaderPlugin.cs" />
     <Compile Include="EntityDumper.cs" />
+    <Compile Include="BgStateExtractor.cs" />
+    <Compile Include="LocalHttpServer.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
