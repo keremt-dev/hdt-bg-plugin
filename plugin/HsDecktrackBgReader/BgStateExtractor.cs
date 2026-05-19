@@ -31,6 +31,30 @@ namespace HsDecktrackBgReader
         // Firestone tribe IDs, kept in sync with index.html `TRIBES`.
         private static readonly int[] AllTribes = new[] { 11, 14, 15, 17, 20, 23, 24, 26, 28, 29 };
 
+        // Firestone tribe id → tribe name (matches index.html `TRIBES`).
+        // The "name" side is what HearthDb's Race enum uses for matching.
+        private static readonly (int Firestone, string Name)[] TribeCatalog = new[]
+        {
+            (11, "MURLOC"),
+            (14, "BEAST"),
+            (15, "DEMON"),
+            (17, "MECHANICAL"),   // also matches "MECH" via fuzzy lookup
+            (20, "DRAGON"),
+            (23, "PIRATE"),
+            (24, "ELEMENTAL"),
+            (26, "QUILBOAR"),
+            (28, "NAGA"),
+            (29, "UNDEAD"),
+        };
+
+        // HearthDb race id → Firestone tribe id. Built lazily from HearthDb's
+        // Race enum so we follow whatever numbers ship in the installed
+        // HearthDb.dll. The two schemas DIFFER (e.g. Beast = 14 in Firestone
+        // but a different int in HearthDb), so a raw subtraction without
+        // this translation gives wrong bans.
+        private static Dictionary<int, int> _hbToFirestone;
+        private static readonly object _hbMapLock = new object();
+
         // Fallback regex when DbfId mapping isn't available (e.g. card DB
         // miss for a brand-new patch hero).
         private static readonly Regex HeroCardIdRegex =
@@ -249,14 +273,78 @@ namespace HsDecktrackBgReader
 
         private List<int> ExtractBannedTribes(object game)
         {
-            var playable = PlayableFromBgDb(game) ?? PlayableFromLegacyProbe(game);
-            if (playable == null)
+            var rawPlayable = PlayableFromBgDb(game) ?? PlayableFromLegacyProbe(game);
+            if (rawPlayable == null)
             {
                 _dumper?.Write("banned_unresolved", new { });
                 RunDeepRaceProbeOnce();
                 return new List<int>();
             }
-            return AllTribes.Where(t => !playable.Contains(t)).ToList();
+
+            // HearthDb race ids → Firestone tribe ids. Drop anything that
+            // doesn't translate (e.g. ALL / INVALID sentinels), because those
+            // aren't real tribes the player can be offered.
+            var map = GetHearthDbToFirestoneMap();
+            var playableFirestone = new HashSet<int>();
+            var unmapped = new List<int>();
+            foreach (var raw in rawPlayable)
+            {
+                if (map.TryGetValue(raw, out var fs)) playableFirestone.Add(fs);
+                else unmapped.Add(raw);
+            }
+            _dumper?.Write("races_translated", new
+            {
+                raw = rawPlayable.OrderBy(x => x).ToArray(),
+                firestone = playableFirestone.OrderBy(x => x).ToArray(),
+                unmapped,
+            });
+            return AllTribes.Where(t => !playableFirestone.Contains(t)).ToList();
+        }
+
+        /// <summary>
+        /// Read HearthDb's Race enum once and build HearthDb→Firestone mapping
+        /// by matching enum member name to TribeCatalog. Both "MECH" and
+        /// "MECHANICAL" map to Firestone 17 if either exists.
+        /// </summary>
+        private Dictionary<int, int> GetHearthDbToFirestoneMap()
+        {
+            if (_hbToFirestone != null) return _hbToFirestone;
+            lock (_hbMapLock)
+            {
+                if (_hbToFirestone != null) return _hbToFirestone;
+                var built = new Dictionary<int, int>();
+                Type raceEnum = null;
+                try { raceEnum = typeof(HearthDb.Cards).Assembly.GetType("HearthDb.Enums.Race"); }
+                catch (Exception ex) { _dumper?.Write("race_enum_load_error", new { error = ex.Message }); }
+                if (raceEnum == null || !raceEnum.IsEnum)
+                {
+                    _dumper?.Write("race_enum_missing", new { });
+                    _hbToFirestone = built;
+                    return _hbToFirestone;
+                }
+
+                // Index every enum name → int once, then walk TribeCatalog.
+                var byName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var n in Enum.GetNames(raceEnum))
+                {
+                    try { byName[n] = Convert.ToInt32(Enum.Parse(raceEnum, n)); }
+                    catch { }
+                }
+                foreach (var (firestone, name) in TribeCatalog)
+                {
+                    if (byName.TryGetValue(name, out var hb)) built[hb] = firestone;
+                    // "MECHANICAL" is HearthDb's spelling, "MECH" is BG slang
+                    if (name == "MECHANICAL" && byName.TryGetValue("MECH", out var hbMech))
+                        built[hbMech] = firestone;
+                }
+                _dumper?.Write("hearthdb_race_map", new
+                {
+                    enumValues = byName,
+                    mapping = built,
+                });
+                _hbToFirestone = built;
+                return _hbToFirestone;
+            }
         }
 
         /// <summary>
