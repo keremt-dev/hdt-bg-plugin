@@ -116,6 +116,20 @@
       </div>
     </div>
 
+    <div class="rounded-lg border hairline bg-[#11101a]">
+      <label class="flex items-center justify-between gap-3 px-3 py-2.5 cursor-pointer select-none">
+        <span class="flex items-center gap-2">
+          <span id="liveDot" class="w-2 h-2 rounded-full bg-[var(--ink-2)]" title="offline"></span>
+          <span class="text-[12px]">Live <span class="text-[var(--ink-2)]" id="liveStatus">— HDT plugin'inden oto-okuma</span></span>
+        </span>
+        <input type="checkbox" id="liveToggle" class="accent-[var(--purple)]">
+      </label>
+      <label class="flex items-center justify-between gap-3 px-3 py-2 cursor-pointer select-none border-t hairline opacity-70 hover:opacity-100">
+        <span class="text-[11px] text-[var(--ink-1)]">Auto-Analyze <span class="text-[var(--ink-2)]">— stable state → otomatik bas</span></span>
+        <input type="checkbox" id="liveAutoAnalyze" class="accent-[var(--purple)]">
+      </label>
+    </div>
+
     <button id="analyze" class="w-full py-3.5 rounded-xl bg-[var(--gold)] text-black font-semibold tracking-tight hover:bg-[#ffd97a] transition active:scale-[.99] disabled:opacity-40 disabled:cursor-not-allowed">
       Analyze lobby
     </button>
@@ -153,7 +167,7 @@ const TRIBES = [
 const TRIBE_BY_ID = Object.fromEntries(TRIBES.map(t=>[t.id,t]));
 const TRIBE_BY_KEY = Object.fromEntries(TRIBES.map(t=>[t.name.toLowerCase(),t]));
 
-const HEROES = [["A. F. Kay","TB_BaconShop_HERO_16"],["Al'Akir","TB_BaconShop_HERO_76"],["Alexstrasza","TB_BaconShop_HERO_56"],["Ambassador Faelin","BG22_HERO_201"],["Arch-Villain Rafaam","TB_BaconShop_HERO_45"],["Artanis","BG31_HERO_802"],["Bru'kan","BG22_HERO_001"],["Buttons","BG32_HERO_002"],["C'Thun","TB_BaconShop_HERO_29"],["Cap'n Hoggarr","BG26_HERO_101"],["Captain Eudora","TB_BaconShop_HERO_64"],["Captain Hooktusk","TB_BaconShop_HERO_67"],["Cariel Roame","BG21_HERO_000"],["Chenvaala","TB_BaconShop_HERO_78"],["Cookie the Cook","BG21_HERO_020"],["Dancin' Deryl","TB_BaconShop_HERO_36"],["Death Speaker Blackthorn","BG20_HERO_103"],["Deathwing","TB_BaconShop_HERO_52"],["Dinotamer Brann","TB_BaconShop_HERO_43"],["Doctor Holli'dae","BG28_HERO_801"],["Drek'Thar","BG22_HERO_002"],["E.T.C., Band Manager","BG25_HERO_105"],["Edwin VanCleef","TB_BaconShop_HERO_01"],["Elise Starseeker","TB_BaconShop_HERO_42"],["Enhance-o Mechano","BG24_HERO_204"],["Exarch Othaar","BG31_HERO_006"],["Farseer Nobundo","BG31_HERO_003"],["Forest Lord Cenarius","BG32_HERO_001"],["Forest Warden Omu","TB_BaconShop_HERO_74"],["Fungalmancer Flurgl","TB_BaconShop_HERO_55"],["Galakrond","TB_BaconShop_HERO_02"],["Galewing","BG20_HERO_283"],["George the Fallen","TB_BaconShop_HERO_15"],["Greybough","TB_BaconShop_HERO_95"],["Guff Runetotem","BG20_HERO_242"],["Heistbaron Togwaggle","BG23_HERO_305"],["Illidan Stormrage","TB_BaconShop_HERO_08"],["Infinite Toki","TB_BaconShop_HERO_28"],["Inge, the Iron Hymn","BG26_HERO_102"],["Ini Stormcoil","BG22_HERO_200"],["Jandice Barov","TB_BaconShop_HERO_71"],["Jim Raynor","BG31_HERO_801"],["Kael'thas Sunstrider","TB_BaconShop_HERO_60"],["Kerrigan, Queen of Blades","BG31_HERO_811"],["King Mukla","TB_BaconShop_HERO_38"],["Kurtrus Ashfallen","BG20_HERO_280"],["Lady Vashj","BG23_HERO_304"],["Lich Baz'hial","TB_BaconShop_HERO_25"],["Lord Barov","TB_BaconShop_HERO_72"],["Lord Jaraxxus","TB_BaconShop_HERO_37"],["Maiev Shadowsong","TB_BaconShop_HERO_62"],["Malygos","TB_BaconShop_HERO_58"],["Marin the Manager","BG30_HERO_304"],["Master Nguyen","BG20_HERO_202"],["Millhouse Manastorm","TB_BaconShop_HERO_49"],["Millificent Manastorm","TB_BaconShop_HERO_17"],["Mr. Bigglesworth","TB_BaconShop_HERO_70"],["Murloc Holmes","BG23_HERO_303"],["Mutanus the Devourer","BG20_HERO_301"],["N'Zoth","TB_BaconShop_HERO_93"],["Nozdormu","TB_BaconShop_HERO_57"],["Onyxia","BG22_HERO_305"],["Overlord Saurfang","BG20_HERO_102"],["Ozumat","BG23_HERO_201"],["Patches the Pirate","TB_BaconShop_HERO_18"],["Patchwerk","TB_BaconShop_HERO_34"],["Professor Putricide","BG25_HERO_100"],["Pyramad","TB_BaconShop_HERO_39"],["Queen Wagtoggle","TB_BaconShop_HERO_14"],["Ragnaros the Firelord","TB_BaconShop_HERO_11"],["Rakanishu","TB_BaconShop_HERO_75"],["Reno Jackson","TB_BaconShop_HERO_41"],["Rock Master Voone","BG26_HERO_104"],["Rokara","BG20_HERO_100"],["Scabbs Cutterbutter","BG21_HERO_010"],["Shudderwock","TB_BaconShop_HERO_23"],["Silas Darkmoon","TB_BaconShop_HERO_90"],["Sindragosa","TB_BaconShop_HERO_27"],["Sir Finley Mrrgglton","TB_BaconShop_HERO_40"],["Sire Denathrius","BG24_HERO_100"],["Skycap'n Kragg","TB_BaconShop_HERO_68"],["Snake Eyes","BG28_HERO_400"],["Sneed","BG21_HERO_030"],["Sylvanas Windrunner","BG23_HERO_306"],["Tae'thelan Bloodwatcher","BG28_HERO_800"],["Tamsin Roame","BG20_HERO_282"],["Tavish Stormpike","BG22_HERO_000"],["Teron Gorefiend","BG25_HERO_103"],["Tess Greymane","TB_BaconShop_HERO_50"],["The Curator","TB_BaconShop_HERO_33"],["The Great Akazamzarak","TB_BaconShop_HERO_21"],["The Jailer","TB_BaconShop_HERO_702"],["The Lich King","TB_BaconShop_HERO_22"],["The Rat King","TB_BaconShop_HERO_12"],["Thorim, Stormlord","BG27_HERO_801"],["Tickatus","TB_BaconShop_HERO_94"],["Trade Prince Gallywix","TB_BaconShop_HERO_10"],["Vanndar Stormpike","BG22_HERO_003"],["Varden Dawngrasp","BG22_HERO_004"],["Vol'jin","BG20_HERO_201"],["Xyrella","BG20_HERO_101"],["Y'Shaarj","TB_BaconShop_HERO_92"],["Yogg-Saron, Hope's End","TB_BaconShop_HERO_35"],["Ysera","TB_BaconShop_HERO_53"],["Zephrys, the Great","TB_BaconShop_HERO_91"],["Zerek, Master Cloner","BG31_HERO_005"]].map(([name,id])=>({name,id}));
+const HEROES = [["A. F. Kay","TB_BaconShop_HERO_16"],["Al'Akir","TB_BaconShop_HERO_76"],["Alexstrasza","TB_BaconShop_HERO_56"],["Ambassador Faelin","BG22_HERO_201"],["Aranna Starseeker","TB_BaconShop_HERO_59"],["Arch-Villain Rafaam","TB_BaconShop_HERO_45"],["Artanis","BG31_HERO_802"],["Bru'kan","BG22_HERO_001"],["Buttons","BG32_HERO_002"],["C'Thun","TB_BaconShop_HERO_29"],["Cap'n Hoggarr","BG26_HERO_101"],["Captain Eudora","TB_BaconShop_HERO_64"],["Captain Hooktusk","TB_BaconShop_HERO_67"],["Cariel Roame","BG21_HERO_000"],["Chenvaala","TB_BaconShop_HERO_78"],["Cookie the Cook","BG21_HERO_020"],["Dancin' Deryl","TB_BaconShop_HERO_36"],["Death Speaker Blackthorn","BG20_HERO_103"],["Deathwing","TB_BaconShop_HERO_52"],["Dinotamer Brann","TB_BaconShop_HERO_43"],["Doctor Holli'dae","BG28_HERO_801"],["Drek'Thar","BG22_HERO_002"],["E.T.C., Band Manager","BG25_HERO_105"],["Edwin VanCleef","TB_BaconShop_HERO_01"],["Elise Starseeker","TB_BaconShop_HERO_42"],["Enhance-o Mechano","BG24_HERO_204"],["Exarch Othaar","BG31_HERO_006"],["Farseer Nobundo","BG31_HERO_003"],["Forest Lord Cenarius","BG32_HERO_001"],["Forest Warden Omu","TB_BaconShop_HERO_74"],["Fungalmancer Flurgl","TB_BaconShop_HERO_55"],["Galakrond","TB_BaconShop_HERO_02"],["Galewing","BG20_HERO_283"],["Genn, Worgen King","BG35_HERO_001"],["George the Fallen","TB_BaconShop_HERO_15"],["Greybough","TB_BaconShop_HERO_95"],["Guff Runetotem","BG20_HERO_242"],["Heistbaron Togwaggle","BG23_HERO_305"],["Illidan Stormrage","TB_BaconShop_HERO_08"],["Infinite Toki","TB_BaconShop_HERO_28"],["Inge, the Iron Hymn","BG26_HERO_102"],["Ini Stormcoil","BG22_HERO_200"],["Jandice Barov","TB_BaconShop_HERO_71"],["Jim Raynor","BG31_HERO_801"],["Kael'thas Sunstrider","TB_BaconShop_HERO_60"],["Kerrigan, Queen of Blades","BG31_HERO_811"],["King Mukla","TB_BaconShop_HERO_38"],["Kurtrus Ashfallen","BG20_HERO_280"],["Lady Vashj","BG23_HERO_304"],["Lich Baz'hial","TB_BaconShop_HERO_25"],["Loh, the Living Legend","BG33_HERO_001"],["Lord Barov","TB_BaconShop_HERO_72"],["Lord Jaraxxus","TB_BaconShop_HERO_37"],["Maiev Shadowsong","TB_BaconShop_HERO_62"],["Malygos","TB_BaconShop_HERO_58"],["Marin the Manager","BG30_HERO_304"],["Master Nguyen","BG20_HERO_202"],["Millhouse Manastorm","TB_BaconShop_HERO_49"],["Millificent Manastorm","TB_BaconShop_HERO_17"],["Mister Clocksworth","BG34_HERO_002"],["Morchie","BG34_HERO_004"],["Mr. Bigglesworth","TB_BaconShop_HERO_70"],["Murloc Holmes","BG23_HERO_303"],["Murozond, Unbounded","BG34_HERO_000"],["Mutanus the Devourer","BG20_HERO_301"],["N'Zoth","TB_BaconShop_HERO_93"],["Nozdormu","TB_BaconShop_HERO_57"],["Onyxia","BG22_HERO_305"],["Overlord Saurfang","BG20_HERO_102"],["Ozumat","BG23_HERO_201"],["Patches the Pirate","TB_BaconShop_HERO_18"],["Patchwerk","TB_BaconShop_HERO_34"],["Professor Putricide","BG25_HERO_100"],["Pyramad","TB_BaconShop_HERO_39"],["Queen Azshara","BG22_HERO_007"],["Queen Wagtoggle","TB_BaconShop_HERO_14"],["Ragnaros the Firelord","TB_BaconShop_HERO_11"],["Rakanishu","TB_BaconShop_HERO_75"],["Reno Jackson","TB_BaconShop_HERO_41"],["Rock Master Voone","BG26_HERO_104"],["Rokara","BG20_HERO_100"],["Scabbs Cutterbutter","BG21_HERO_010"],["Shudderwock","TB_BaconShop_HERO_23"],["Silas Darkmoon","TB_BaconShop_HERO_90"],["Sindragosa","TB_BaconShop_HERO_27"],["Sir Finley Mrrgglton","TB_BaconShop_HERO_40"],["Sire Denathrius","BG24_HERO_100"],["Skycap'n Kragg","TB_BaconShop_HERO_68"],["Snake Eyes","BG28_HERO_400"],["Sneed","BG21_HERO_030"],["Sylvanas Windrunner","BG23_HERO_306"],["Tae'thelan Bloodwatcher","BG28_HERO_800"],["Tamsin Roame","BG20_HERO_282"],["Tavish Stormpike","BG22_HERO_000"],["Teron Gorefiend","BG25_HERO_103"],["Tess Greymane","TB_BaconShop_HERO_50"],["The Curator","TB_BaconShop_HERO_33"],["The Great Akazamzarak","TB_BaconShop_HERO_21"],["The Jailer","TB_BaconShop_HERO_702"],["The Lich King","TB_BaconShop_HERO_22"],["The Rat King","TB_BaconShop_HERO_12"],["Thorim, Stormlord","BG27_HERO_801"],["Tickatus","TB_BaconShop_HERO_94"],["Time Twister Chromie","BG34_HERO_001"],["Trade Prince Gallywix","TB_BaconShop_HERO_10"],["Vanndar Stormpike","BG22_HERO_003"],["Varden Dawngrasp","BG22_HERO_004"],["Vol'jin","BG20_HERO_201"],["Xyrella","BG20_HERO_101"],["Y'Shaarj","TB_BaconShop_HERO_92"],["Yogg-Saron, Hope's End","TB_BaconShop_HERO_35"],["Ysera","TB_BaconShop_HERO_53"],["Zephrys, the Great","TB_BaconShop_HERO_91"],["Zerek, Master Cloner","BG31_HERO_005"]].map(([name,id])=>({name,id}));
 
 const heroArt = id => `https://art.hearthstonejson.com/v1/render/latest/enUS/512x/${id}.png`;
 
@@ -166,6 +180,12 @@ const state = {
   data: null,
   comps: null,
   strategies: {},
+  liveMode: false,
+  liveHandle: null,
+  liveLastJson: '',
+  autoAnalyze: false,
+  autoAnalyzeTimer: null,
+  lastAutoAnalyzedSig: '',
 };
 
 // ─────────────────────────────────────────── TRIBES UI
@@ -310,6 +330,140 @@ function flash(btn, msg){
   const old = btn.textContent; btn.textContent = msg; btn.classList.add('!bg-[#ff7a8a]');
   setTimeout(()=>{ btn.textContent = old; btn.classList.remove('!bg-[#ff7a8a]'); }, 1300);
 }
+
+// ─────────────────────────────────────────── LIVE MODE (HDT plugin → localhost)
+const LIVE_URL = 'http://localhost:9876/lobby';
+const LIVE_INTERVAL_MS = 2000;
+const liveDot = document.getElementById('liveDot');
+const liveStatus = document.getElementById('liveStatus');
+const liveToggle = document.getElementById('liveToggle');
+
+const LIVE_DOT_COLORS = {
+  off:     'var(--ink-2)',
+  waiting: 'var(--purple-glow)',
+  online:  'var(--good)',
+  error:   'var(--bad)',
+};
+function setLiveDot(kind, label){
+  liveDot.style.background = LIVE_DOT_COLORS[kind] || LIVE_DOT_COLORS.off;
+  liveDot.title = label || kind;
+  liveStatus.textContent = label ? '— ' + label : '— HDT plugin\'inden oto-okuma';
+}
+function liveCountsLabel(){
+  const h = state.heroes.filter(Boolean).length;
+  const b = state.banned.size;
+  return `aktif · ${h} hero, ${b} ban`;
+}
+
+async function pollLive(){
+  let r;
+  try {
+    r = await fetch(LIVE_URL, { cache: 'no-store' });
+  } catch {
+    setLiveDot('error', 'sidecar offline (HDT plugin çalışıyor mu?)');
+    return;
+  }
+  if (r.status === 204){ setLiveDot('waiting', 'lobby bekleniyor'); return; }
+  if (!r.ok){ setLiveDot('error', `sidecar HTTP ${r.status}`); return; }
+
+  let body;
+  try { body = await r.text(); }
+  catch { setLiveDot('error', 'sidecar yanıtı okunamadı'); return; }
+
+  if (body === state.liveLastJson){ setLiveDot('online', liveCountsLabel()); return; }
+  state.liveLastJson = body;
+
+  let lobby;
+  try { lobby = JSON.parse(body); }
+  catch { setLiveDot('error', 'sidecar JSON parse hatası'); return; }
+
+  applyLiveLobby(lobby);
+  setLiveDot('online', liveCountsLabel());
+  maybeAutoAnalyze();
+}
+
+const AUTO_ANALYZE_DEBOUNCE_MS = 1000;
+function maybeAutoAnalyze(){
+  if (!state.liveMode || !state.autoAnalyze) return;
+  // Debounce: re-arm on each state change, so a flurry of pick-state
+  // updates (reroll, partial reads) coalesces into a single click.
+  clearTimeout(state.autoAnalyzeTimer);
+  state.autoAnalyzeTimer = setTimeout(() => {
+    const heroIds = state.heroes.filter(Boolean).map(h => h.id).sort().join(',');
+    const banIds  = [...state.banned].sort().join(',');
+    const sig = heroIds + '|' + banIds;
+    // Validation matches analyzeBtn.onclick — gate the auto-fire on the
+    // same minimum: at least 1 hero AND at least 1 banned tribe.
+    if (!heroIds || !banIds) return;
+    if (sig === state.lastAutoAnalyzedSig) return;       // already analyzed this exact lobby
+    state.lastAutoAnalyzedSig = sig;
+    analyzeBtn.click();
+  }, AUTO_ANALYZE_DEBOUNCE_MS);
+}
+
+function applyLiveLobby(lobby){
+  const bannedArr = Array.isArray(lobby?.banned) ? lobby.banned : [];
+  const heroesArr = Array.isArray(lobby?.heroes) ? lobby.heroes : [];
+
+  // Tribes: keep only known tribe IDs, drop unknowns.
+  const validTribeIds = new Set(TRIBES.map(t=>t.id));
+  const nextBanned = new Set(bannedArr.filter(id => validTribeIds.has(id)));
+
+  // Heroes: 4 slots, map cardId → HEROES entry, unknown IDs become null.
+  const nextHeroes = [null, null, null, null];
+  heroesArr.slice(0, 4).forEach((id, i) => {
+    const found = HEROES.find(h => h.id === id);
+    nextHeroes[i] = found || null;
+  });
+
+  // Only re-render the affected sub-tree if it actually changed.
+  if (!setsEqual(state.banned, nextBanned)){
+    state.banned = nextBanned;
+    renderTribes();
+    document.getElementById('bannedCount').textContent = state.banned.size;
+  }
+  if (!heroSlotsEqual(state.heroes, nextHeroes)){
+    state.heroes = nextHeroes;
+    renderSlots();
+  }
+}
+
+function setsEqual(a, b){
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+function heroSlotsEqual(a, b){
+  for (let i=0;i<4;i++){
+    const aid = a[i]?.id || null, bid = b[i]?.id || null;
+    if (aid !== bid) return false;
+  }
+  return true;
+}
+
+liveToggle.addEventListener('change', () => {
+  state.liveMode = liveToggle.checked;
+  if (state.liveMode){
+    setLiveDot('waiting', 'bağlanılıyor');
+    pollLive();                                  // immediate first poll
+    state.liveHandle = setInterval(pollLive, LIVE_INTERVAL_MS);
+  } else {
+    clearInterval(state.liveHandle);
+    state.liveHandle = null;
+    state.liveLastJson = '';
+    clearTimeout(state.autoAnalyzeTimer);
+    state.autoAnalyzeTimer = null;
+    state.lastAutoAnalyzedSig = '';
+    setLiveDot('off', 'kapalı');
+  }
+});
+
+const liveAutoAnalyze = document.getElementById('liveAutoAnalyze');
+liveAutoAnalyze.addEventListener('change', () => {
+  state.autoAnalyze = liveAutoAnalyze.checked;
+  if (state.autoAnalyze) maybeAutoAnalyze();
+  else { clearTimeout(state.autoAnalyzeTimer); state.autoAnalyzeTimer = null; }
+});
 
 function skeleton(){
   return `

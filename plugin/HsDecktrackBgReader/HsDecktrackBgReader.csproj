@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SDK-style csproj targeting .NET Framework 4.7.2 (HDT's runtime).
+    Build with:
+      dotnet build HsDecktrackBgReader.csproj -c Debug
+    No msbuild / Visual Studio / .NET Framework Dev Pack required — the
+    NuGet package Microsoft.NETFramework.ReferenceAssemblies.net472 pulls
+    in the framework reference assemblies.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <Platforms>x86</Platforms>
+    <OutputType>Library</OutputType>
+    <RootNamespace>HsDecktrackBgReader</RootNamespace>
+    <AssemblyName>HsDecktrackBgReader</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Deterministic>true</Deterministic>
+
+    <!-- We have our own Properties/AssemblyInfo.cs -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+
+    <!-- Plugin uses System.Windows.Controls.MenuItem from PresentationFramework -->
+    <UseWPF>true</UseWPF>
+
+    <!-- Avoid the implicit App.config the SDK injects for .NET Framework libs -->
+    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>false</GenerateBindingRedirectsOutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference assemblies for net472 so dotnet build works without the
+         .NET Framework 4.7.2 Developer Pack installed system-wide. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    HDT references: HintPath points at refs/ next to the project. If refs/
+    is empty (clean checkout) the AutoStageHdtRefs target below populates
+    it from the locally-installed HDT. Override the auto-discovery by
+    passing /p:HdtRoot=<path>.
+  -->
+  <ItemGroup>
+    <Reference Include="HearthstoneDeckTracker">
+      <HintPath>refs\HearthstoneDeckTracker.exe</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="HearthDb">
+      <HintPath>refs\HearthDb.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!--
+    Auto-stage HDT reference binaries before MSBuild tries to resolve them.
+    Runs only when refs/ is missing, so subsequent builds skip the script.
+  -->
+  <PropertyGroup>
+    <_HdtRootArg Condition="'$(HdtRoot)' != ''">-HdtRoot "$(HdtRoot)"</_HdtRootArg>
+  </PropertyGroup>
+  <Target Name="AutoStageHdtRefs"
+          BeforeTargets="ResolveAssemblyReferences"
+          Condition="!Exists('$(MSBuildProjectDirectory)\refs\HearthstoneDeckTracker.exe') Or !Exists('$(MSBuildProjectDirectory)\refs\HearthDb.dll')">
+    <Message Importance="high" Text="refs/ missing HDT binaries — running stage-hdt-refs.ps1" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\stage-hdt-refs.ps1&quot; -RefsDir &quot;$(MSBuildProjectDirectory)\refs&quot; $(_HdtRootArg)" />
+  </Target>
+
+  <!-- Copy the built DLL into HDT's Plugins folder when building Debug -->
+  <Target Name="DeployToHdtPlugins" AfterTargets="Build" Condition=" '$(Configuration)' == 'Debug' ">
+    <ItemGroup>
+      <_PluginOut Include="$(TargetPath)" />
+      <_PluginOut Include="$(TargetDir)$(TargetName).pdb" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+    </ItemGroup>
+    <MakeDir Directories="$(AppData)\HearthstoneDeckTracker\Plugins\HsDecktrackBgReader" />
+    <Copy SourceFiles="@(_PluginOut)" DestinationFolder="$(AppData)\HearthstoneDeckTracker\Plugins\HsDecktrackBgReader" />
+  </Target>
+
+</Project>
