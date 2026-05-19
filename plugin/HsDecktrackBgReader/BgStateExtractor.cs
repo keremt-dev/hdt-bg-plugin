@@ -37,6 +37,7 @@ namespace HsDecktrackBgReader
             new Regex(@"^(TB_BaconShop_HERO_\d+|BG\d+_HERO_\d+)$", RegexOptions.Compiled);
 
         private readonly EntityDumper _dumper;
+        private bool _deepProbeDone;
 
         public BgStateExtractor(EntityDumper dumper)
         {
@@ -196,17 +197,179 @@ namespace HsDecktrackBgReader
             if (playable == null)
             {
                 _dumper?.Write("banned_unresolved", new { });
+                RunDeepRaceProbeOnce();
                 return new List<int>();
             }
             return AllTribes.Where(t => !playable.Contains(t)).ToList();
         }
 
+        /// <summary>
+        /// Diagnostic: when we can't resolve playable races by the known
+        /// paths, enumerate every static property on every BG-named type in
+        /// the HDT assembly that returns a HashSet/List/IEnumerable of ints,
+        /// and log its current value. Runs exactly once per plugin load so
+        /// the JSONL doesn't bloat. The output is what we use to add a new
+        /// path to PlayableFromBgDb on the next iteration.
+        /// </summary>
+        private void RunDeepRaceProbeOnce()
+        {
+            if (_deepProbeDone) return;
+            _deepProbeDone = true;
+            try
+            {
+                var asm = typeof(Hearthstone_Deck_Tracker.API.GameEvents).Assembly;
+                var hits = new List<object>();
+                foreach (var t in asm.GetTypes())
+                {
+                    var n = t.Name;
+                    if (n.IndexOf("Battleground", StringComparison.OrdinalIgnoreCase) < 0
+                        && n.IndexOf("Race",         StringComparison.OrdinalIgnoreCase) < 0
+                        && n.IndexOf("Lobby",        StringComparison.OrdinalIgnoreCase) < 0
+                        && n.IndexOf("Tribe",        StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    var staticGetters = new List<object>();
+                    foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.Static | BindingFlags.NonPublic))
+                    {
+                        object val = null; string err = null;
+                        try { val = p.GetValue(null); } catch (Exception ex) { err = ex.GetBaseException().Message; }
+                        staticGetters.Add(new
+                        {
+                            name = p.Name,
+                            type = p.PropertyType.FullName,
+                            value = SummarizeForProbe(val),
+                            error = err,
+                        });
+                    }
+                    foreach (var f in t.GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.NonPublic))
+                    {
+                        object val = null; string err = null;
+                        try { val = f.GetValue(null); } catch (Exception ex) { err = ex.GetBaseException().Message; }
+                        staticGetters.Add(new
+                        {
+                            name = f.Name + "(field)",
+                            type = f.FieldType.FullName,
+                            value = SummarizeForProbe(val),
+                            error = err,
+                        });
+                    }
+                    if (staticGetters.Count > 0)
+                        hits.Add(new { type = t.FullName, members = staticGetters });
+                }
+                _dumper?.Write("deep_race_probe", new { typeCount = hits.Count, hits });
+            }
+            catch (Exception ex)
+            {
+                _dumper?.Write("deep_race_probe_error", new { message = ex.Message });
+            }
+        }
+
+        private static object SummarizeForProbe(object v)
+        {
+            if (v == null) return null;
+            if (v is string s) return s.Length > 120 ? s.Substring(0, 120) : s;
+            var type = v.GetType();
+            if (type.IsPrimitive || type.IsEnum) return v.ToString();
+            if (v is IEnumerable en && !(v is string))
+            {
+                var list = new List<object>();
+                int i = 0;
+                foreach (var item in en)
+                {
+                    if (i++ >= 30) { list.Add("..."); break; }
+                    list.Add(item?.ToString());
+                }
+                return new { kind = "enumerable", items = list, count = i };
+            }
+            return type.FullName + ": " + v.ToString();
+        }
+
         private HashSet<int> PlayableFromBgDb(object game)
         {
-            var bgDb = GetMember(game, "BattlegroundsDb");
-            if (bgDb == null) return null;
-            var races = GetMember(bgDb, "Races");
-            return TryAsIntSet(races);
+            // BattlegroundsDb.Races (HashSet<int>) is HDT's authoritative list
+            // of playable tribes for the current lobby — but the BattlegroundsDb
+            // instance hides behind several access patterns depending on the
+            // HDT version. Try them all and return the first non-empty Races.
+            var asm = typeof(Hearthstone_Deck_Tracker.API.GameEvents).Assembly;
+
+            // a) Direct property on Core.Game
+            var candidate = GetMember(game, "BattlegroundsDb");
+            var races = RacesFrom(candidate, "Core.Game.BattlegroundsDb");
+            if (races != null) return races;
+
+            // b) Static singletons on the BattlegroundsDb type itself
+            var bgDbType = asm.GetType("Hearthstone_Deck_Tracker.Hearthstone.BattlegroundsDb");
+            if (bgDbType != null)
+            {
+                foreach (var n in new[] { "Instance", "Default", "Current" })
+                {
+                    var inst = GetMember(bgDbType, n);
+                    races = RacesFrom(inst, "BattlegroundsDb." + n);
+                    if (races != null) return races;
+                }
+            }
+
+            // c) BattlegroundsDbSingleton.Instance (HDT also has this wrapper)
+            var singletonType = asm.GetType("Hearthstone_Deck_Tracker.Utility.Battlegrounds.BattlegroundsDbSingleton");
+            if (singletonType != null)
+            {
+                foreach (var n in new[] { "Instance", "Default", "Current", "Get" })
+                {
+                    var inst = GetMember(singletonType, n);
+                    if (inst == null)
+                    {
+                        // Try as method
+                        try
+                        {
+                            var m = singletonType.GetMethod(n, BindingFlags.Public | BindingFlags.Static | BindingFlags.NonPublic);
+                            if (m != null && m.GetParameters().Length == 0) inst = m.Invoke(null, null);
+                        }
+                        catch { }
+                    }
+                    if (inst == null) continue;
+                    races = RacesFrom(inst, "BattlegroundsDbSingleton." + n);
+                    if (races != null) return races;
+                    // Maybe singleton has an inner .Instance field/property
+                    var inner = GetMember(inst, "Instance") ?? GetMember(inst, "Value") ?? GetMember(inst, "Db");
+                    if (inner != null)
+                    {
+                        races = RacesFrom(inner, "BattlegroundsDbSingleton." + n + ".(inner)");
+                        if (races != null) return races;
+                    }
+                }
+            }
+
+            // d) HearthMirror lobby info provider — per-lobby tribe set may
+            //    live on BattlegroundsLobbyInfo as AvailableRaces or similar.
+            var providerType = asm.GetType("Hearthstone_Deck_Tracker.Hearthstone.HearthMirrorBattlegroundsLobbyInfoProvider");
+            if (providerType != null)
+            {
+                // Look for a static instance
+                foreach (var n in new[] { "Instance", "Default", "Current" })
+                {
+                    var inst = GetMember(providerType, n);
+                    if (inst == null) continue;
+                    var lobby = GetMember(inst, "BattlegroundsLobbyInfo");
+                    if (lobby == null) continue;
+                    foreach (var prop in new[] { "AvailableRaces", "Races", "PlayableRaces" })
+                    {
+                        races = TryAsIntSet(GetMember(lobby, prop));
+                        if (races != null) { _dumper?.Write("races_source", new { from = "HearthMirrorBattlegroundsLobbyInfoProvider." + n + ".BattlegroundsLobbyInfo." + prop }); return races; }
+                    }
+                }
+            }
+            return null;
+        }
+
+        private HashSet<int> RacesFrom(object source, string sourceLabel)
+        {
+            if (source == null) return null;
+            var races = TryAsIntSet(GetMember(source, "Races"));
+            if (races != null)
+            {
+                _dumper?.Write("races_source", new { from = sourceLabel, count = races.Count });
+                return races;
+            }
+            return null;
         }
 
         private HashSet<int> PlayableFromLegacyProbe(object game)
