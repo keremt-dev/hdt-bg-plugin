@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>HS Battlegrounds — Lobby Analyzer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#07070b; --bg-1:#0d0d14; --bg-2:#141420;
+    --ink-0:#e8e6ef; --ink-1:#a8a5b8; --ink-2:#6c6880;
+    --gold:#f3c969; --gold-soft:#c9a85a;
+    --purple:#7c5cff; --purple-glow:#9e85ff;
+    --good:#5be5a8; --bad:#ff7a8a;
+    --line:rgba(255,255,255,.06);
+  }
+  html,body{background:var(--bg-0);color:var(--ink-0);font-family:'Inter',ui-sans-serif,system-ui;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(124,92,255,.18), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(243,201,105,.08), transparent 60%),
+      var(--bg-0);
+    min-height:100vh;
+  }
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-feature-settings:"tnum","ss01";}
+  .hairline{border-color:var(--line)}
+  .glow-purple{box-shadow:0 0 0 1px rgba(124,92,255,.4), 0 12px 40px -12px rgba(124,92,255,.45);}
+  .glow-gold  {box-shadow:0 0 0 1px rgba(243,201,105,.35), 0 12px 40px -12px rgba(243,201,105,.35);}
+  .chip{transition:all .15s ease;}
+  .chip[data-banned="true"]{opacity:.32;filter:grayscale(.6) brightness(.7);}
+  .chip[data-banned="true"] .x{display:flex;}
+  .chip .x{display:none;}
+  .hero-card{transition:transform .25s cubic-bezier(.2,.7,.2,1), box-shadow .25s;}
+  .hero-card:hover{transform:translateY(-2px);}
+  .bar{height:6px;border-radius:99px;background:linear-gradient(90deg, var(--purple) 0%, var(--purple-glow) 100%);}
+  .scrollbar::-webkit-scrollbar{width:10px;height:10px}
+  .scrollbar::-webkit-scrollbar-thumb{background:#2a2638;border-radius:99px}
+  details>summary{list-style:none;cursor:pointer}
+  details>summary::-webkit-details-marker{display:none}
+  .pulse{animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+  .ring-accent{box-shadow:inset 0 0 0 1px rgba(243,201,105,.55), 0 0 0 3px rgba(243,201,105,.08);}
+  .skel{background:linear-gradient(90deg,#1a1825 0%,#241f33 50%,#1a1825 100%);background-size:200% 100%;animation:sk 1.4s linear infinite;}
+  @keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  input::placeholder{color:#5b576b}
+  .card-chip{cursor:help}
+  #cardTip{position:fixed;z-index:200;pointer-events:none;opacity:0;transform:translateY(4px) scale(.98);transition:opacity .12s ease,transform .12s ease;}
+  #cardTip[data-show="true"]{opacity:1;transform:translateY(0) scale(1);}
+  #cardTip img{display:block;width:280px;max-width:35vw;filter:drop-shadow(0 18px 40px rgba(0,0,0,.6)) drop-shadow(0 0 18px rgba(124,92,255,.25));}
+  #cardTip .fallback{width:220px;padding:12px 14px;background:#11101a;border:1px solid var(--line);border-radius:10px;font-size:12px;color:var(--ink-1);}
+  .dropdown{position:absolute;top:calc(100% + 6px);left:0;right:0;max-height:280px;overflow:auto;z-index:50;background:#11101a;border:1px solid var(--line);border-radius:12px;box-shadow:0 24px 60px -12px rgba(0,0,0,.6)}
+  .dropdown button{display:flex;width:100%;text-align:left;padding:8px 12px;gap:10px;align-items:center}
+  .dropdown button:hover,.dropdown button[data-active="true"]{background:#1a1828}
+  .label-eyebrow{letter-spacing:.18em;text-transform:uppercase;font-size:11px;color:var(--ink-2);font-weight:600}
+  .num-xl{font-size:48px;line-height:1;letter-spacing:-.03em;font-weight:700}
+  .placement-pill{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:99px;font-weight:700;font-size:13px}
+</style>
+</head>
+<body class="antialiased">
+
+<div id="cardTip" aria-hidden="true"><img alt="" /></div>
+
+<header class="border-b hairline">
+  <div class="max-w-[1280px] mx-auto px-6 py-5 flex items-center justify-between">
+    <div class="flex items-baseline gap-3">
+      <div class="text-[var(--gold)] mono text-[13px] tracking-[.3em]">BG · LOBBY</div>
+      <h1 class="text-[15px] font-semibold">Battlegrounds Analyzer</h1>
+    </div>
+    <div class="text-[12px] text-[var(--ink-2)] mono" id="snapshot">— snapshot loading</div>
+  </div>
+</header>
+
+<main class="max-w-[1280px] mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-8">
+
+  <!-- LEFT: INPUTS -->
+  <section class="lg:sticky lg:top-6 self-start space-y-6">
+
+    <!-- Tribes -->
+    <div>
+      <div class="flex items-center justify-between mb-3">
+        <div class="label-eyebrow">Tribes <span class="text-[var(--ink-1)] normal-case tracking-normal font-normal">(banlananları işaretle)</span></div>
+        <div class="text-[11px] mono"><span id="bannedCount">0</span>/5 banned</div>
+      </div>
+      <div id="tribes" class="grid grid-cols-5 gap-2"></div>
+    </div>
+
+    <!-- Heroes -->
+    <div>
+      <div class="label-eyebrow mb-3">Hero seçenekleri <span class="text-[var(--ink-1)] normal-case tracking-normal font-normal">(2-4)</span></div>
+      <div id="heroSlots" class="grid grid-cols-2 gap-2"></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <div class="label-eyebrow mb-2">MMR</div>
+        <select id="mmr" class="w-full bg-[#11101a] border hairline rounded-lg px-3 py-2 text-sm">
+          <option value="100">All</option>
+          <option value="50">Top 50%</option>
+          <option value="25" selected>Top 25%</option>
+          <option value="10">Top 10%</option>
+          <option value="1">Top 1%</option>
+        </select>
+      </div>
+      <div>
+        <div class="label-eyebrow mb-2">Period</div>
+        <select id="period" class="w-full bg-[#11101a] border hairline rounded-lg px-3 py-2 text-sm">
+          <option value="past-three">Son 3 gün</option>
+          <option value="past-seven" selected>Son 7 gün</option>
+          <option value="last-patch">Son patch</option>
+          <option value="all-time">All-time</option>
+        </select>
+      </div>
+    </div>
+
+    <button id="analyze" class="w-full py-3.5 rounded-xl bg-[var(--gold)] text-black font-semibold tracking-tight hover:bg-[#ffd97a] transition active:scale-[.99] disabled:opacity-40 disabled:cursor-not-allowed">
+      Analyze lobby
+    </button>
+
+    <div class="text-[11px] text-[var(--ink-2)] leading-relaxed">
+      Veri kaynağı: <a class="underline decoration-dotted hover:text-[var(--ink-1)]" href="https://www.firestoneapp.com/" target="_blank">Firestone</a> public BGS stats.
+      Tahmini sıra = hero baseline + bu lobide bulunan tribe'ların hero üzerindeki bireysel etkilerinin toplamı.
+    </div>
+  </section>
+
+  <!-- RIGHT: RESULTS -->
+  <section class="space-y-8 min-w-0">
+    <div id="empty" class="rounded-2xl border hairline p-12 text-center">
+      <div class="text-[var(--ink-2)] text-sm">Tribes ve hero seçeneklerini gir, <span class="text-[var(--ink-0)]">Analyze</span>'a bas.</div>
+    </div>
+
+    <div id="results" class="hidden space-y-8"></div>
+  </section>
+</main>
+
+<script>
+// ─────────────────────────────────────────── DATA
+const TRIBES = [
+  {id:14,name:'Beast',     icon:'🐺'},
+  {id:15,name:'Demon',     icon:'😈'},
+  {id:20,name:'Dragon',    icon:'🐉'},
+  {id:24,name:'Elemental', icon:'🔥'},
+  {id:17,name:'Mech',      icon:'🤖'},
+  {id:11,name:'Murloc',    icon:'🐟'},
+  {id:28,name:'Naga',      icon:'🐍'},
+  {id:23,name:'Pirate',    icon:'🏴‍☠️'},
+  {id:26,name:'Quilboar',  icon:'🐗'},
+  {id:29,name:'Undead',    icon:'💀'},
+];
+const TRIBE_BY_ID = Object.fromEntries(TRIBES.map(t=>[t.id,t]));
+const TRIBE_BY_KEY = Object.fromEntries(TRIBES.map(t=>[t.name.toLowerCase(),t]));
+
+const HEROES = [["A. F. Kay","TB_BaconShop_HERO_16"],["Al'Akir","TB_BaconShop_HERO_76"],["Alexstrasza","TB_BaconShop_HERO_56"],["Ambassador Faelin","BG22_HERO_201"],["Arch-Villain Rafaam","TB_BaconShop_HERO_45"],["Artanis","BG31_HERO_802"],["Bru'kan","BG22_HERO_001"],["Buttons","BG32_HERO_002"],["C'Thun","TB_BaconShop_HERO_29"],["Cap'n Hoggarr","BG26_HERO_101"],["Captain Eudora","TB_BaconShop_HERO_64"],["Captain Hooktusk","TB_BaconShop_HERO_67"],["Cariel Roame","BG21_HERO_000"],["Chenvaala","TB_BaconShop_HERO_78"],["Cookie the Cook","BG21_HERO_020"],["Dancin' Deryl","TB_BaconShop_HERO_36"],["Death Speaker Blackthorn","BG20_HERO_103"],["Deathwing","TB_BaconShop_HERO_52"],["Dinotamer Brann","TB_BaconShop_HERO_43"],["Doctor Holli'dae","BG28_HERO_801"],["Drek'Thar","BG22_HERO_002"],["E.T.C., Band Manager","BG25_HERO_105"],["Edwin VanCleef","TB_BaconShop_HERO_01"],["Elise Starseeker","TB_BaconShop_HERO_42"],["Enhance-o Mechano","BG24_HERO_204"],["Exarch Othaar","BG31_HERO_006"],["Farseer Nobundo","BG31_HERO_003"],["Forest Lord Cenarius","BG32_HERO_001"],["Forest Warden Omu","TB_BaconShop_HERO_74"],["Fungalmancer Flurgl","TB_BaconShop_HERO_55"],["Galakrond","TB_BaconShop_HERO_02"],["Galewing","BG20_HERO_283"],["George the Fallen","TB_BaconShop_HERO_15"],["Greybough","TB_BaconShop_HERO_95"],["Guff Runetotem","BG20_HERO_242"],["Heistbaron Togwaggle","BG23_HERO_305"],["Illidan Stormrage","TB_BaconShop_HERO_08"],["Infinite Toki","TB_BaconShop_HERO_28"],["Inge, the Iron Hymn","BG26_HERO_102"],["Ini Stormcoil","BG22_HERO_200"],["Jandice Barov","TB_BaconShop_HERO_71"],["Jim Raynor","BG31_HERO_801"],["Kael'thas Sunstrider","TB_BaconShop_HERO_60"],["Kerrigan, Queen of Blades","BG31_HERO_811"],["King Mukla","TB_BaconShop_HERO_38"],["Kurtrus Ashfallen","BG20_HERO_280"],["Lady Vashj","BG23_HERO_304"],["Lich Baz'hial","TB_BaconShop_HERO_25"],["Lord Barov","TB_BaconShop_HERO_72"],["Lord Jaraxxus","TB_BaconShop_HERO_37"],["Maiev Shadowsong","TB_BaconShop_HERO_62"],["Malygos","TB_BaconShop_HERO_58"],["Marin the Manager","BG30_HERO_304"],["Master Nguyen","BG20_HERO_202"],["Millhouse Manastorm","TB_BaconShop_HERO_49"],["Millificent Manastorm","TB_BaconShop_HERO_17"],["Mr. Bigglesworth","TB_BaconShop_HERO_70"],["Murloc Holmes","BG23_HERO_303"],["Mutanus the Devourer","BG20_HERO_301"],["N'Zoth","TB_BaconShop_HERO_93"],["Nozdormu","TB_BaconShop_HERO_57"],["Onyxia","BG22_HERO_305"],["Overlord Saurfang","BG20_HERO_102"],["Ozumat","BG23_HERO_201"],["Patches the Pirate","TB_BaconShop_HERO_18"],["Patchwerk","TB_BaconShop_HERO_34"],["Professor Putricide","BG25_HERO_100"],["Pyramad","TB_BaconShop_HERO_39"],["Queen Wagtoggle","TB_BaconShop_HERO_14"],["Ragnaros the Firelord","TB_BaconShop_HERO_11"],["Rakanishu","TB_BaconShop_HERO_75"],["Reno Jackson","TB_BaconShop_HERO_41"],["Rock Master Voone","BG26_HERO_104"],["Rokara","BG20_HERO_100"],["Scabbs Cutterbutter","BG21_HERO_010"],["Shudderwock","TB_BaconShop_HERO_23"],["Silas Darkmoon","TB_BaconShop_HERO_90"],["Sindragosa","TB_BaconShop_HERO_27"],["Sir Finley Mrrgglton","TB_BaconShop_HERO_40"],["Sire Denathrius","BG24_HERO_100"],["Skycap'n Kragg","TB_BaconShop_HERO_68"],["Snake Eyes","BG28_HERO_400"],["Sneed","BG21_HERO_030"],["Sylvanas Windrunner","BG23_HERO_306"],["Tae'thelan Bloodwatcher","BG28_HERO_800"],["Tamsin Roame","BG20_HERO_282"],["Tavish Stormpike","BG22_HERO_000"],["Teron Gorefiend","BG25_HERO_103"],["Tess Greymane","TB_BaconShop_HERO_50"],["The Curator","TB_BaconShop_HERO_33"],["The Great Akazamzarak","TB_BaconShop_HERO_21"],["The Jailer","TB_BaconShop_HERO_702"],["The Lich King","TB_BaconShop_HERO_22"],["The Rat King","TB_BaconShop_HERO_12"],["Thorim, Stormlord","BG27_HERO_801"],["Tickatus","TB_BaconShop_HERO_94"],["Trade Prince Gallywix","TB_BaconShop_HERO_10"],["Vanndar Stormpike","BG22_HERO_003"],["Varden Dawngrasp","BG22_HERO_004"],["Vol'jin","BG20_HERO_201"],["Xyrella","BG20_HERO_101"],["Y'Shaarj","TB_BaconShop_HERO_92"],["Yogg-Saron, Hope's End","TB_BaconShop_HERO_35"],["Ysera","TB_BaconShop_HERO_53"],["Zephrys, the Great","TB_BaconShop_HERO_91"],["Zerek, Master Cloner","BG31_HERO_005"]].map(([name,id])=>({name,id}));
+
+const heroArt = id => `https://art.hearthstonejson.com/v1/render/latest/enUS/512x/${id}.png`;
+
+// ─────────────────────────────────────────── STATE
+const state = {
+  banned: new Set(),
+  heroes: [null, null, null, null],
+  mmr: 25,
+  period: 'past-seven',
+  data: null,
+  comps: null,
+  strategies: {},
+};
+
+// ─────────────────────────────────────────── TRIBES UI
+const tribesEl = document.getElementById('tribes');
+function renderTribes(){
+  tribesEl.innerHTML = TRIBES.map(t=>`
+    <button class="chip group relative rounded-lg border hairline bg-[#11101a] hover:bg-[#191728] py-2.5 px-1 text-center"
+            data-id="${t.id}" data-banned="${state.banned.has(t.id)}">
+      <div class="text-base leading-none">${t.icon}</div>
+      <div class="text-[10px] mt-1 text-[var(--ink-1)] truncate">${t.name}</div>
+      <div class="x absolute inset-0 items-center justify-center text-[var(--bad)] text-xl font-bold">✕</div>
+    </button>`).join('');
+  tribesEl.querySelectorAll('.chip').forEach(b=>{
+    b.onclick = () => {
+      const id = +b.dataset.id;
+      if (state.banned.has(id)) state.banned.delete(id);
+      else if (state.banned.size < 5) state.banned.add(id);
+      else { b.animate([{transform:'translateX(0)'},{transform:'translateX(-3px)'},{transform:'translateX(3px)'},{transform:'translateX(0)'}],{duration:200}); return; }
+      renderTribes();
+      document.getElementById('bannedCount').textContent = state.banned.size;
+    };
+  });
+}
+renderTribes();
+
+// ─────────────────────────────────────────── HERO SLOTS UI
+const slotsEl = document.getElementById('heroSlots');
+function renderSlots(){
+  slotsEl.innerHTML = state.heroes.map((h,i)=>`
+    <div class="relative" data-slot="${i}">
+      <div class="rounded-lg border hairline bg-[#11101a] overflow-hidden ${h?'ring-accent':''}">
+        ${h ? `
+          <div class="flex items-center gap-2 p-2">
+            <img src="${heroArt(h.id)}" class="w-10 h-10 rounded object-cover bg-black" onerror="this.style.opacity=0">
+            <div class="min-w-0 flex-1">
+              <div class="text-[12px] truncate">${h.name}</div>
+              <div class="text-[10px] text-[var(--ink-2)] mono truncate">${h.id}</div>
+            </div>
+            <button class="text-[var(--ink-2)] hover:text-[var(--bad)] text-sm px-1" data-clear="${i}">✕</button>
+          </div>` : `
+          <input type="text" placeholder="Hero ${i+1}…"
+                 class="w-full bg-transparent px-3 py-3 text-[13px] outline-none" data-search="${i}" autocomplete="off">
+          <div class="dropdown hidden" data-dropdown="${i}"></div>`}
+      </div>
+    </div>`).join('');
+
+  slotsEl.querySelectorAll('[data-clear]').forEach(b=>{
+    b.onclick = () => { state.heroes[+b.dataset.clear] = null; renderSlots(); };
+  });
+  slotsEl.querySelectorAll('[data-search]').forEach(inp=>{
+    const i = +inp.dataset.search;
+    const dd = slotsEl.querySelector(`[data-dropdown="${i}"]`);
+    let active = 0;
+    const filter = ()=>{
+      const q = inp.value.trim().toLowerCase();
+      if (!q){ dd.classList.add('hidden'); return; }
+      const used = new Set(state.heroes.filter(Boolean).map(h=>h.id));
+      const hits = HEROES.filter(h=>h.name.toLowerCase().includes(q) && !used.has(h.id)).slice(0,8);
+      if (!hits.length){ dd.innerHTML = `<div class="px-3 py-2 text-[12px] text-[var(--ink-2)]">no match</div>`; dd.classList.remove('hidden'); return; }
+      active = 0;
+      dd.innerHTML = hits.map((h,k)=>`
+        <button data-pick="${h.id}" data-idx="${k}" ${k===0?'data-active="true"':''}>
+          <img src="${heroArt(h.id)}" class="w-8 h-8 rounded object-cover bg-black flex-shrink-0" onerror="this.style.opacity=0">
+          <div class="min-w-0">
+            <div class="text-[12px] truncate">${h.name}</div>
+            <div class="text-[10px] text-[var(--ink-2)] mono truncate">${h.id}</div>
+          </div>
+        </button>`).join('');
+      dd.classList.remove('hidden');
+      dd.querySelectorAll('[data-pick]').forEach(btn=>{
+        btn.onmousedown = (e)=>{
+          e.preventDefault();
+          const id = btn.dataset.pick;
+          state.heroes[i] = HEROES.find(h=>h.id===id);
+          renderSlots();
+        };
+      });
+    };
+    inp.addEventListener('input', filter);
+    inp.addEventListener('focus', filter);
+    inp.addEventListener('blur', ()=>setTimeout(()=>dd.classList.add('hidden'),120));
+    inp.addEventListener('keydown', (e)=>{
+      const items = [...dd.querySelectorAll('[data-pick]')];
+      if (!items.length) return;
+      if (e.key==='ArrowDown'){ e.preventDefault(); active=(active+1)%items.length; }
+      else if (e.key==='ArrowUp'){ e.preventDefault(); active=(active-1+items.length)%items.length; }
+      else if (e.key==='Enter'){ e.preventDefault(); items[active]?.dispatchEvent(new MouseEvent('mousedown')); return; }
+      else return;
+      items.forEach((it,k)=>it.dataset.active = (k===active));
+    });
+  });
+}
+renderSlots();
+
+// ─────────────────────────────────────────── FETCH + ANALYZE
+const fmtNum = n => n.toLocaleString('tr-TR');
+const HERO_STATS_URL = (mmr, period) => `https://static.zerotoheroes.com/api/bgs/hero-stats/mmr-${mmr}/${period}/overview-from-hourly.gz.json`;
+const COMP_STATS_URL = (period)     => `https://static.zerotoheroes.com/api/bgs/comp-stats/${period}/overview-from-hourly.gz.json`;
+const COMP_STRATEGIES_URL           = `https://static.zerotoheroes.com/hearthstone/data/battlegrounds-strategies/bgs-comps-strategies.gz.json`;
+
+async function fetchJSON(url){
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+document.getElementById('mmr').onchange   = e => state.mmr = +e.target.value;
+document.getElementById('period').onchange= e => state.period = e.target.value;
+
+const analyzeBtn = document.getElementById('analyze');
+const emptyEl = document.getElementById('empty');
+const resultsEl = document.getElementById('results');
+
+analyzeBtn.onclick = async () => {
+  const picked = state.heroes.filter(Boolean);
+  if (picked.length < 1) { flash(analyzeBtn, 'En az 1 hero seç'); return; }
+  if (state.banned.size === 0) { flash(analyzeBtn, 'En az 1 tribe banla'); return; }
+
+  analyzeBtn.disabled = true; analyzeBtn.textContent = 'Loading…';
+  emptyEl.classList.add('hidden'); resultsEl.classList.remove('hidden');
+  resultsEl.innerHTML = skeleton();
+
+  try {
+    const [hero, comp, strat] = await Promise.all([
+      fetchJSON(HERO_STATS_URL(state.mmr, state.period)),
+      fetchJSON(COMP_STATS_URL(state.period)),
+      fetchJSON(COMP_STRATEGIES_URL).catch(()=>[]),
+    ]);
+    state.data = hero; state.comps = comp;
+    state.strategies = Object.fromEntries((strat||[]).filter(s=>s.compId).map(s=>[s.compId, s]));
+    document.getElementById('snapshot').textContent =
+      `snapshot ${new Date(hero.lastUpdateDate).toISOString().replace('T',' ').slice(0,16)}Z · ${fmtNum(hero.dataPoints)} games`;
+    render();
+  } catch (err) {
+    resultsEl.innerHTML = `<div class="rounded-2xl border hairline p-6 text-[var(--bad)]">Veri yüklenemedi: ${err.message}</div>`;
+  } finally {
+    analyzeBtn.disabled = false; analyzeBtn.textContent = 'Analyze lobby';
+  }
+};
+
+function flash(btn, msg){
+  const old = btn.textContent; btn.textContent = msg; btn.classList.add('!bg-[#ff7a8a]');
+  setTimeout(()=>{ btn.textContent = old; btn.classList.remove('!bg-[#ff7a8a]'); }, 1300);
+}
+
+function skeleton(){
+  return `
+    <div class="space-y-3"><div class="label-eyebrow">Hero ranking</div>
+      ${Array(state.heroes.filter(Boolean).length).fill(0).map(()=>`<div class="skel rounded-xl h-[92px]"></div>`).join('')}
+    </div>
+    <div class="space-y-3"><div class="label-eyebrow">Comps</div>
+      ${Array(6).fill(0).map(()=>`<div class="skel rounded-xl h-[56px]"></div>`).join('')}
+    </div>`;
+}
+
+// ─────────────────────────────────────────── RENDER
+function render(){
+  const picked = state.heroes.filter(Boolean);
+  const heroStats = state.data.heroStats;
+  const available = new Set([...TRIBES.map(t=>t.id)].filter(id=>!state.banned.has(id)));
+
+  // 1) Hero ranking
+  const rows = picked.map(h => {
+    const row = heroStats.find(x=>x.heroCardId===h.id);
+    if (!row) return { h, missing:true };
+    const tribeRows = (row.tribeStats||[]).filter(t=>available.has(t.tribe));
+    const impactSum = tribeRows.reduce((s,t)=>s + (t.impactAveragePosition||0), 0);
+    const est = row.averagePosition + impactSum;
+    return {
+      h, row, tribeRows,
+      ref: row.averagePosition, est,
+      delta: impactSum,
+      dp: row.dataPoints,
+      pickRate: row.totalOffered ? row.totalPicked/row.totalOffered : null,
+    };
+  }).sort((a,b)=>{
+    if (a.missing && !b.missing) return 1;
+    if (b.missing && !a.missing) return -1;
+    return (a.est ?? 99) - (b.est ?? 99);
+  });
+
+  // 2) Comp playability
+  const playable = state.comps.compStats
+    .map(c => {
+      const arch = c.archetype.toLowerCase();
+      const tribesInName = Object.keys(TRIBE_BY_KEY).filter(k=>arch.includes(k));
+      const requiresBanned = tribesInName.some(k => state.banned.has(TRIBE_BY_KEY[k].id));
+      const atMmr = c.averagePlacementAtMmr.find(x=>x.mmr===state.mmr) || c.averagePlacementAtMmr.find(x=>x.mmr===100);
+      const strat = state.strategies[c.archetype];
+      return {
+        archetype: c.archetype,
+        requiresBanned,
+        tribes: tribesInName,
+        avg: atMmr ? atMmr.placement : c.averagePlacement,
+        dp:  atMmr ? atMmr.dataPoints : c.dataPoints,
+        difficulty: strat?.difficulty || null,
+        powerLevel: strat?.powerLevel || null,
+        tip:        strat?.tips?.[0] || null,
+        cards:      strat?.cards || [],
+      };
+    })
+    .filter(c => !c.requiresBanned && c.dp > 50)
+    .sort((a,b)=>a.avg-b.avg);
+
+  const blocked = state.comps.compStats
+    .map(c => {
+      const arch = c.archetype.toLowerCase();
+      const tribesInName = Object.keys(TRIBE_BY_KEY).filter(k=>arch.includes(k));
+      const bannedTribes = tribesInName.filter(k => state.banned.has(TRIBE_BY_KEY[k].id));
+      return { archetype:c.archetype, blockedBy: bannedTribes };
+    }).filter(c=>c.blockedBy.length);
+
+  resultsEl.innerHTML = `
+    ${renderLobbyBar()}
+    ${renderHeroRanking(rows)}
+    ${renderComps(playable, blocked)}
+  `;
+}
+
+function renderLobbyBar(){
+  const avail = TRIBES.filter(t=>!state.banned.has(t.id));
+  const banned= TRIBES.filter(t=> state.banned.has(t.id));
+  return `
+    <div class="rounded-2xl border hairline p-5 bg-[#0f0e18]">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div>
+          <div class="label-eyebrow mb-2">Available</div>
+          <div class="flex flex-wrap gap-1.5">
+            ${avail.map(t=>`<span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#1a1828] text-[12px]"><span>${t.icon}</span>${t.name}</span>`).join('')}
+          </div>
+        </div>
+        <div>
+          <div class="label-eyebrow mb-2 text-[var(--bad)]">Banned</div>
+          <div class="flex flex-wrap gap-1.5">
+            ${banned.length ? banned.map(t=>`<span class="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[rgba(255,122,138,.2)] text-[var(--bad)] text-[12px] line-through opacity-80"><span>${t.icon}</span>${t.name}</span>`).join('') : `<span class="text-[12px] text-[var(--ink-2)]">—</span>`}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function placementBar(v){
+  // map v from [2.5 .. 5.5] to [100% .. 0%]
+  const min=2.8, max=5.2;
+  const p = Math.max(0, Math.min(1, 1 - (v-min)/(max-min)));
+  return `<div class="bar" style="width:${(p*100).toFixed(1)}%"></div>`;
+}
+
+function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function diffBadge(d){
+  if (!d) return '<span class="text-[10px] text-[var(--ink-2)] mono">—</span>';
+  const map = {
+    'Easy':   'text-[var(--good)] border-[rgba(91,229,168,.35)] bg-[rgba(91,229,168,.08)]',
+    'Medium': 'text-[var(--gold)] border-[rgba(243,201,105,.35)] bg-[rgba(243,201,105,.08)]',
+    'Hard':   'text-[var(--bad)] border-[rgba(255,122,138,.35)] bg-[rgba(255,122,138,.08)]',
+  };
+  return `<span class="inline-flex items-center px-1.5 py-0.5 text-[10px] mono font-semibold rounded border ${map[d]||''}">${d}</span>`;
+}
+
+function tierBadge(t){
+  if (!t) return '<span class="text-[10px] text-[var(--ink-2)] mono">—</span>';
+  const map = {
+    'S': 'text-black bg-[var(--gold)] border-[var(--gold-soft)]',
+    'A': 'text-[var(--purple-glow)] bg-[rgba(124,92,255,.12)] border-[rgba(124,92,255,.4)]',
+    'B': 'text-[var(--ink-0)] bg-[#1a1828] border-[var(--line)]',
+    'C': 'text-[var(--ink-2)] bg-transparent border-[var(--line)]',
+    'D': 'text-[var(--ink-2)] bg-transparent border-[var(--line)] opacity-70',
+  };
+  return `<span class="inline-flex items-center justify-center w-6 h-6 text-[11px] mono font-bold rounded border ${map[t]||map.C}">${t}</span>`;
+}
+
+function pillColor(v){
+  if (v < 3.8) return 'bg-[rgba(91,229,168,.15)] text-[var(--good)] border border-[rgba(91,229,168,.3)]';
+  if (v < 4.2) return 'bg-[rgba(243,201,105,.12)] text-[var(--gold)] border border-[rgba(243,201,105,.3)]';
+  return 'bg-[rgba(255,122,138,.12)] text-[var(--bad)] border border-[rgba(255,122,138,.3)]';
+}
+
+function renderHeroRanking(rows){
+  const winner = rows[0];
+  return `
+    <section>
+      <div class="flex items-baseline justify-between mb-3">
+        <h2 class="label-eyebrow text-[var(--ink-1)]">Hero ranking · bu lobiye özel</h2>
+        <div class="text-[11px] text-[var(--ink-2)] mono">est = ref + Σ impact (available tribes)</div>
+      </div>
+      <div class="space-y-3">
+      ${rows.map((r,i)=>{
+        if (r.missing) return `
+          <div class="rounded-xl border hairline p-4 flex items-center gap-4 opacity-60">
+            <div class="placement-pill bg-[#1a1828] text-[var(--ink-2)]">${i+1}</div>
+            <img src="${heroArt(r.h.id)}" class="w-12 h-12 rounded object-cover bg-black">
+            <div class="flex-1"><div class="text-sm">${r.h.name}</div><div class="text-[11px] text-[var(--ink-2)]">no data for this hero in this bucket</div></div>
+          </div>`;
+        const isWinner = r === winner;
+        return `
+          <div class="hero-card rounded-xl border hairline p-4 bg-[#0f0e18] ${isWinner?'glow-gold':''}">
+            <div class="flex items-center gap-4">
+              <div class="placement-pill ${isWinner?'bg-[var(--gold)] text-black':'bg-[#1a1828] text-[var(--ink-1)]'}">${i+1}</div>
+              <img src="${heroArt(r.h.id)}" class="w-14 h-14 rounded-lg object-cover bg-black ring-1 ring-white/5">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <div class="text-[15px] font-semibold truncate">${r.h.name}</div>
+                  ${isWinner ? '<span class="text-[10px] mono text-[var(--gold)] px-1.5 py-0.5 border border-[var(--gold-soft)] rounded">PICK</span>':''}
+                </div>
+                <div class="flex items-center gap-3 mt-1 text-[11px] text-[var(--ink-2)] mono">
+                  <span>baseline ${r.ref.toFixed(2)}</span>
+                  <span class="${r.delta<0?'text-[var(--good)]':r.delta>0?'text-[var(--bad)]':''}">Δ ${r.delta>=0?'+':''}${r.delta.toFixed(2)}</span>
+                  <span>${fmtNum(r.dp)} games</span>
+                  ${r.pickRate!=null ? `<span>pick ${(r.pickRate*100).toFixed(0)}%</span>`:''}
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="num-xl mono ${r.est<3.8?'text-[var(--good)]':r.est<4.2?'text-[var(--gold)]':'text-[var(--bad)]'}">${r.est.toFixed(2)}</div>
+                <div class="text-[10px] text-[var(--ink-2)] mono mt-1">EST AVG</div>
+              </div>
+            </div>
+            <div class="mt-3">${placementBar(r.est)}</div>
+            ${r.tribeRows.length ? `
+              <details class="mt-3">
+                <summary class="text-[11px] text-[var(--ink-2)] hover:text-[var(--ink-1)] inline-flex items-center gap-1">▸ Tribe impact breakdown</summary>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                  ${r.tribeRows.slice().sort((a,b)=>(a.impactAveragePosition||0)-(b.impactAveragePosition||0)).map(t=>{
+                    const imp = t.impactAveragePosition||0;
+                    return `<div class="flex items-center justify-between text-[11px] bg-[#11101a] rounded-md px-2 py-1.5">
+                      <span class="flex items-center gap-1.5"><span>${TRIBE_BY_ID[t.tribe]?.icon||'?'}</span><span>${TRIBE_BY_ID[t.tribe]?.name||t.tribe}</span></span>
+                      <span class="mono ${imp<0?'text-[var(--good)]':imp>0?'text-[var(--bad)]':'text-[var(--ink-2)]'}">${imp>=0?'+':''}${imp.toFixed(2)}</span>
+                    </div>`;
+                  }).join('')}
+                </div>
+              </details>` : ''}
+          </div>`;
+      }).join('')}
+      </div>
+    </section>`;
+}
+
+function renderComps(playable, blocked){
+  return `
+    <section>
+      <div class="flex items-baseline justify-between mb-3">
+        <h2 class="label-eyebrow text-[var(--ink-1)]">Oynanabilir komp'lar · mmr-${state.mmr}</h2>
+        <div class="text-[11px] text-[var(--ink-2)] mono">${playable.length} of ${state.comps.compStats.length}</div>
+      </div>
+      <div class="rounded-2xl border hairline overflow-hidden bg-[#0f0e18]">
+        <div class="grid grid-cols-[28px_1fr_auto_auto_auto_auto] gap-x-3 px-4 py-2.5 text-[10px] uppercase tracking-wider text-[var(--ink-2)] font-medium bg-[#11101a]">
+          <div>#</div><div>Archetype</div><div>Tribes</div><div class="text-right">Diff</div><div class="text-right">Tier</div><div class="text-right">Avg / Games</div>
+        </div>
+        ${playable.map((c,i)=>`
+          <details class="border-t hairline group">
+            <summary class="grid grid-cols-[28px_1fr_auto_auto_auto_auto] gap-x-3 items-center px-4 py-3 hover:bg-[#11101a]/60 ${c.tip?'cursor-pointer':'cursor-default'}">
+              <div class="mono text-[11px] text-[var(--ink-2)]">${String(i+1).padStart(2,'0')}</div>
+              <div class="flex items-center gap-2 min-w-0">
+                ${c.tip ? '<span class="text-[var(--ink-2)] text-[10px] group-open:rotate-90 transition-transform">▸</span>' : '<span class="w-[10px]"></span>'}
+                <span class="text-[14px] font-medium truncate">${c.archetype.replace(/_/g,' ')}</span>
+              </div>
+              <div class="flex items-center gap-1">${c.tribes.length ? c.tribes.map(k=>`<span class="inline-flex items-center gap-0.5 text-[11px] text-[var(--ink-1)]">${TRIBE_BY_KEY[k].icon}<span class="hidden sm:inline">${TRIBE_BY_KEY[k].name}</span></span>`).join('') : '<span class="text-[var(--ink-2)] text-[11px]">neutral</span>'}</div>
+              <div class="text-right">${diffBadge(c.difficulty)}</div>
+              <div class="text-right">${tierBadge(c.powerLevel)}</div>
+              <div class="text-right">
+                <span class="mono px-2 py-0.5 rounded ${pillColor(c.avg)}">${c.avg.toFixed(2)}</span>
+                <div class="text-[10px] mono text-[var(--ink-2)] mt-0.5">${fmtNum(c.dp)} g</div>
+              </div>
+            </summary>
+            ${c.tip ? `
+              <div class="px-4 pb-4 pt-1 bg-[#0a0911]/60 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
+                <div class="space-y-2.5 min-w-0">
+                  <div>
+                    <div class="label-eyebrow mb-1.5">Nasıl oynanır</div>
+                    <div class="text-[13px] leading-relaxed text-[var(--ink-0)]">${escapeHtml(c.tip.tip || '')}</div>
+                  </div>
+                  ${c.tip.whenToCommit ? `
+                    <div>
+                      <div class="label-eyebrow mb-1.5 text-[var(--gold-soft)]">When to commit</div>
+                      <div class="text-[12px] text-[var(--ink-1)] italic">${escapeHtml(c.tip.whenToCommit)}</div>
+                    </div>` : ''}
+                  ${c.tip.author ? `<div class="text-[10px] mono text-[var(--ink-2)]">— ${escapeHtml(c.tip.author)}${c.tip.date?` · ${c.tip.date}`:''}</div>` : ''}
+                </div>
+                ${c.cards.length ? `
+                  <div class="md:max-w-[280px]">
+                    <div class="label-eyebrow mb-1.5">Core cards</div>
+                    <div class="flex flex-wrap gap-1.5">
+                      ${c.cards.filter(x=>x.status==='CORE').slice(0,8).map(x=>`
+                        <span class="card-chip inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#1a1828] border hairline text-[11px]" data-cid="${escapeHtml(x.cardId)}" data-cname="${escapeHtml(x.name||x.cardId)}">
+                          <img src="https://static.zerotoheroes.com/hearthstone/cardart/tiles/${x.cardId}.png" class="w-5 h-5 rounded object-cover bg-black" onerror="this.style.display='none'">
+                          <span>${escapeHtml(x.name||x.cardId)}</span>
+                        </span>`).join('')}
+                    </div>
+                  </div>` : ''}
+              </div>` : ''}
+          </details>
+        `).join('')}
+      </div>
+
+      ${blocked.length ? `
+        <details class="mt-4">
+          <summary class="text-[12px] text-[var(--ink-2)] hover:text-[var(--ink-1)]">▸ ${blocked.length} komp banlı tribe yüzünden elendi</summary>
+          <div class="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            ${blocked.map(b=>`<div class="text-[11px] text-[var(--ink-2)] px-2 py-1 rounded bg-[#11101a]">${b.archetype.replace(/_/g,' ')} <span class="text-[var(--bad)] opacity-60">(${b.blockedBy.join(',')})</span></div>`).join('')}
+          </div>
+        </details>`:''}
+    </section>`;
+}
+
+// ─────────────────────────────────────────── CARD TOOLTIP
+const cardTipEl = document.getElementById('cardTip');
+const cardTipImg = cardTipEl.querySelector('img');
+
+const CARD_RENDER_URLS = id => [
+  `https://art.hearthstonejson.com/v1/render/latest/enUS/512x/${id}.png`,
+  `https://art.hearthstonejson.com/v1/bgs/latest/enUS/512x/${id}.png`,
+];
+
+let tipSourceIdx = 0;
+let tipCurrentId = null;
+
+function positionTip(target){
+  const r = target.getBoundingClientRect();
+  const tw = 280, th = 380;
+  const margin = 12;
+  let x = r.right + margin;
+  if (x + tw > window.innerWidth - 8) x = Math.max(8, r.left - tw - margin);
+  let y = r.top + r.height/2 - th/2;
+  y = Math.max(8, Math.min(window.innerHeight - th - 8, y));
+  cardTipEl.style.left = `${x}px`;
+  cardTipEl.style.top  = `${y}px`;
+}
+
+function showCardTip(target){
+  const id = target.dataset.cid;
+  if (!id) return;
+  tipCurrentId = id;
+  tipSourceIdx = 0;
+  cardTipImg.style.display = '';
+  cardTipImg.src = CARD_RENDER_URLS(id)[0];
+  cardTipImg.alt = target.dataset.cname || id;
+  positionTip(target);
+  cardTipEl.dataset.show = 'true';
+}
+
+function hideCardTip(){
+  tipCurrentId = null;
+  cardTipEl.dataset.show = 'false';
+}
+
+cardTipImg.addEventListener('error', () => {
+  if (!tipCurrentId) return;
+  const urls = CARD_RENDER_URLS(tipCurrentId);
+  tipSourceIdx++;
+  if (tipSourceIdx < urls.length) cardTipImg.src = urls[tipSourceIdx];
+  else hideCardTip();
+});
+
+document.addEventListener('mouseover', e => {
+  const chip = e.target.closest?.('.card-chip[data-cid]');
+  if (chip) showCardTip(chip);
+});
+document.addEventListener('mouseout', e => {
+  const chip = e.target.closest?.('.card-chip[data-cid]');
+  if (chip && !chip.contains(e.relatedTarget)) hideCardTip();
+});
+document.addEventListener('scroll', hideCardTip, true);
+
+// preload snapshot date hint
+fetchJSON(HERO_STATS_URL(state.mmr, state.period)).then(d=>{
+  document.getElementById('snapshot').textContent =
+    `snapshot ${new Date(d.lastUpdateDate).toISOString().replace('T',' ').slice(0,16)}Z · ${fmtNum(d.dataPoints)} games`;
+}).catch(()=>{});
+</script>
+</body>
+</html>

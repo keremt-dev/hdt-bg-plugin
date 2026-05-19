@@ -1,0 +1,23 @@
+# .NET build output
+bin/
+obj/
+*.user
+*.suo
+*.pdb
+packages/
+.vs/
+
+# Plugin artifacts
+*.dll
+!**/refs/*.dll
+
+# Plugin local dumps
+**/dump-*.jsonl
+
+# Editor
+.idea/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
