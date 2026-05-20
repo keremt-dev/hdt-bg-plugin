@@ -206,6 +206,7 @@ function renderTribes(){
       else { b.animate([{transform:'translateX(0)'},{transform:'translateX(-3px)'},{transform:'translateX(3px)'},{transform:'translateX(0)'}],{duration:200}); return; }
       renderTribes();
       document.getElementById('bannedCount').textContent = state.banned.size;
+      if (state.data) render();
     };
   });
 }
@@ -233,7 +234,11 @@ function renderSlots(){
     </div>`).join('');
 
   slotsEl.querySelectorAll('[data-clear]').forEach(b=>{
-    b.onclick = () => { state.heroes[+b.dataset.clear] = null; renderSlots(); };
+    b.onclick = () => {
+      state.heroes[+b.dataset.clear] = null;
+      renderSlots();
+      if (state.data) render();
+    };
   });
   slotsEl.querySelectorAll('[data-search]').forEach(inp=>{
     const i = +inp.dataset.search;
@@ -261,6 +266,7 @@ function renderSlots(){
           const id = btn.dataset.pick;
           state.heroes[i] = HEROES.find(h=>h.id===id);
           renderSlots();
+          if (state.data) render();
         };
       });
     };
@@ -372,9 +378,14 @@ async function pollLive(){
       state.banned = new Set();
       state.heroes = [null, null, null, null];
       state.lastAutoAnalyzedSig = '';
+      state.data = null;
+      state.comps = null;
       renderTribes();
       renderSlots();
       document.getElementById('bannedCount').textContent = 0;
+      emptyEl.classList.remove('hidden');
+      resultsEl.classList.add('hidden');
+      resultsEl.innerHTML = '';
     }
     setLiveDot('waiting', 'lobby bekleniyor');
     return;
@@ -432,14 +443,20 @@ function applyLiveLobby(lobby){
   });
 
   // Only re-render the affected sub-tree if it actually changed.
+  let changed = false;
   if (!setsEqual(state.banned, nextBanned)){
     state.banned = nextBanned;
     renderTribes();
     document.getElementById('bannedCount').textContent = state.banned.size;
+    changed = true;
   }
   if (!heroSlotsEqual(state.heroes, nextHeroes)){
     state.heroes = nextHeroes;
     renderSlots();
+    changed = true;
+  }
+  if (changed && state.data) {
+    render();
   }
 }
 
