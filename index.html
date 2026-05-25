@@ -564,9 +564,24 @@ function render(){
       return { archetype:c.archetype, blockedBy: bannedTribes };
     }).filter(c=>c.blockedBy.length);
 
+  // 3) Tribe priority — for each playable tribe, the best comp that uses
+  //    it (lowest avg placement). Tells the user which tribe to fight for
+  //    given the lobby's bans. `playable` is already sorted asc by avg,
+  //    so the first match per tribe is its best comp.
+  const tribePriority = TRIBES
+    .filter(t => !state.banned.has(t.id))
+    .map(t => {
+      const key = t.name.toLowerCase();
+      const best = playable.find(c => c.tribes.includes(key));
+      return best ? { tribe: t, best } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.best.avg - b.best.avg);
+
   resultsEl.innerHTML = `
     ${renderLobbyBar()}
     ${renderHeroRanking(rows)}
+    ${renderTribePriority(tribePriority)}
     ${renderComps(playable, blocked)}
   `;
 }
@@ -685,6 +700,34 @@ function renderHeroRanking(rows){
               </details>` : ''}
           </div>`;
       }).join('')}
+      </div>
+    </section>`;
+}
+
+function renderTribePriority(rows){
+  if (!rows.length) return '';
+  const winner = rows[0];
+  return `
+    <section>
+      <div class="flex items-baseline justify-between mb-3">
+        <h2 class="label-eyebrow text-[var(--ink-1)]">Tribe öncelik · bu lobide en kazanan tribe</h2>
+        <div class="text-[11px] text-[var(--ink-2)] mono">en iyi comp ortalaması · mmr-${state.mmr}</div>
+      </div>
+      <div class="rounded-2xl border hairline overflow-hidden bg-[#0f0e18]">
+        ${rows.map((r,i)=>`
+          <div class="grid grid-cols-[28px_28px_1fr_auto_auto] gap-x-3 items-center px-4 py-2.5 ${i?'border-t hairline':''} ${r===winner?'bg-[rgba(243,201,105,.06)]':''}">
+            <div class="mono text-[11px] ${r===winner?'text-[var(--gold)]':'text-[var(--ink-2)]'}">${String(i+1).padStart(2,'0')}</div>
+            <div class="text-xl text-center leading-none">${r.tribe.icon}</div>
+            <div class="min-w-0">
+              <div class="text-[14px] ${r===winner?'font-semibold':''}">${r.tribe.name}${r===winner?' <span class="text-[10px] mono text-[var(--gold)] px-1.5 py-0.5 border border-[var(--gold-soft)] rounded ml-1">FOCUS</span>':''}</div>
+              <div class="text-[10px] text-[var(--ink-2)] mono truncate">via ${escapeHtml(r.best.archetype.replace(/_/g,' '))}</div>
+            </div>
+            <div class="text-right">
+              <span class="mono px-2 py-0.5 rounded ${pillColor(r.best.avg)}">${r.best.avg.toFixed(2)}</span>
+            </div>
+            <div class="text-right text-[10px] text-[var(--ink-2)] mono">${fmtNum(r.best.dp)} g</div>
+          </div>
+        `).join('')}
       </div>
     </section>`;
 }
