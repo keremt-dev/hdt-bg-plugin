@@ -15,12 +15,14 @@ const CANNED = [
   { banned: [14, 23, 17],     heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43'], trinkets: [] },
   { banned: [14, 23, 17, 28], heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43', 'BG31_HERO_802', 'BG22_HERO_001'],
     trinkets: [
-      { choiceId: 1, chosen: null, offered: ['BG30_MagicItem_847', 'BG30_MagicItem_510', 'BG30_MagicItem_842'] },
+      // Real trinketCardIds (high-data-points) so the mock exercises the
+      // name + avg-placement lookup against the live trinket-stats feed.
+      { choiceId: 1, chosen: null, offered: ['BG30_MagicItem_847', 'BG30_MagicItem_891', 'BG30_MagicItem_426t'] },
     ] },
   { banned: [14, 23, 17, 28, 11], heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43', 'BG31_HERO_802', 'BG22_HERO_001'],
     trinkets: [
-      { choiceId: 1, chosen: 'BG30_MagicItem_847', offered: ['BG30_MagicItem_847', 'BG30_MagicItem_510', 'BG30_MagicItem_842'] },
-      { choiceId: 2, chosen: null,                 offered: ['BG30_MagicItem_413', 'BG30_MagicItem_812', 'BG30_MagicItem_902'] },
+      { choiceId: 1, chosen: 'BG30_MagicItem_847', offered: ['BG30_MagicItem_847', 'BG30_MagicItem_891', 'BG30_MagicItem_426t'] },
+      { choiceId: 2, chosen: null,                 offered: ['BG35_MagicItem_840', 'BG35_MagicItem_931t', 'BG30_MagicItem_888'] },
     ] },
 ];
 
