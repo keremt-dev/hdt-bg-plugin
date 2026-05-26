@@ -21,6 +21,7 @@ packages/
 # Editor
 .idea/
 .vscode/
+.claude/
 
 # OS
 Thumbs.db
