@@ -800,7 +800,9 @@ function renderTribePriority(rows){
 
 function renderTrinketPriority(rows){
   if (!rows.length) return '';
-  const labelFor = (id) => id === 1 ? 'Lesser' : id === 2 ? 'Greater' : `#${id}`;
+  // HDT's BattlegroundsTrinketPickState.ChoiceId isn't 1/2 — it's an
+  // in-game entity id like 5/12. Label by list position instead.
+  const positionLabel = i => i === 0 ? 'Lesser' : i === 1 ? 'Greater' : `Pick ${i+1}`;
   return `
     <section>
       <div class="flex items-baseline justify-between mb-3">
@@ -808,12 +810,12 @@ function renderTrinketPriority(rows){
         <div class="text-[11px] text-[var(--ink-2)] mono">avg placement · mmr-${state.mmr}</div>
       </div>
       <div class="space-y-3">
-        ${rows.map(p => {
+        ${rows.map((p, pi) => {
           const winner = p.offered.find(o => o.avg != null) || p.offered[0];
           return `
           <div class="rounded-2xl border hairline overflow-hidden bg-[#0f0e18]">
             <div class="flex items-baseline justify-between px-4 py-2.5 bg-[#11101a]">
-              <div class="text-[12px]"><span class="mono text-[var(--ink-2)] mr-2">${labelFor(p.choiceId)}</span>${p.chosen ? `<span class="text-[10px] mono text-[var(--ink-2)]">seçildi: ${escapeHtml(p.chosen)}</span>` : '<span class="text-[10px] mono text-[var(--ink-2)]">3 seçenek</span>'}</div>
+              <div class="text-[12px]"><span class="mono text-[var(--ink-2)] mr-2">${positionLabel(pi)}</span>${p.chosen ? `<span class="text-[10px] mono text-[var(--ink-2)]">seçildi: ${escapeHtml(p.chosen)}</span>` : '<span class="text-[10px] mono text-[var(--ink-2)]">3 seçenek</span>'}</div>
               <div class="text-[10px] mono text-[var(--ink-2)]">${p.offered.length} offered</div>
             </div>
             ${p.offered.map((o,i) => `

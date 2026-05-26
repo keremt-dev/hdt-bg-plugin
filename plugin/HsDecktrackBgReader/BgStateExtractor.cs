@@ -275,51 +275,61 @@ namespace HsDecktrackBgReader
 
         /// <summary>
         /// BattlegroundsTrinketPickParams' property name for the offered
-        /// trinkets isn't in our reflection probe. Walk every public/internal
-        /// property+field on the params object and yield ints from the first
-        /// enumerable-of-ints we encounter. Looks for common names first as
-        /// a fast path so the dump points to the right field name.
+        /// trinkets isn't in our reflection probe. Try common names first;
+        /// if none match, log EVERY int-iterable member found and pick the
+        /// one whose size looks like a real BG offer (>=2). Single-element
+        /// int lists are almost always something else (entity ids, scores) —
+        /// the first real-data run picked one of those and rendered a hero
+        /// p-variant as a "trinket", which is the bug this guards against.
         /// </summary>
         private IEnumerable<int> EnumerateIntsFromAnyMember(object source)
         {
             if (source == null) yield break;
-            var fastPathNames = new[] { "OfferedTrinketDbfIds", "TrinketDbfIds", "Choices", "Options", "Trinkets", "DbfIds" };
+
+            var fastPathNames = new[] { "OfferedTrinketDbfIds", "TrinketDbfIds", "Choices", "Options", "Trinkets", "DbfIds", "ChoiceDbfIds", "Cards" };
             foreach (var name in fastPathNames)
             {
                 var v = GetMember(source, name);
                 var ids = ToIntList(v);
-                if (ids != null)
+                if (ids != null && ids.Count > 0)
                 {
-                    _dumper?.Write("trinket_offered_source", new { from = "params." + name, count = ids.Count });
+                    _dumper?.Write("trinket_offered_source", new { from = "params." + name, count = ids.Count, ids });
                     foreach (var id in ids) yield return id;
                     yield break;
                 }
             }
 
             var t = source.GetType();
+            var allCandidates = new List<(string name, List<int> ids)>();
             foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
                 object v = null;
                 try { v = p.GetValue(source); } catch { continue; }
                 var ids = ToIntList(v);
-                if (ids != null && ids.Count > 0)
-                {
-                    _dumper?.Write("trinket_offered_source", new { from = "params." + p.Name + " (discovered)", count = ids.Count });
-                    foreach (var id in ids) yield return id;
-                    yield break;
-                }
+                if (ids != null) allCandidates.Add(("prop:" + p.Name, ids));
             }
             foreach (var f in t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
                 object v = null;
                 try { v = f.GetValue(source); } catch { continue; }
                 var ids = ToIntList(v);
-                if (ids != null && ids.Count > 0)
-                {
-                    _dumper?.Write("trinket_offered_source", new { from = "params." + f.Name + "(field discovered)", count = ids.Count });
-                    foreach (var id in ids) yield return id;
-                    yield break;
-                }
+                if (ids != null) allCandidates.Add(("field:" + f.Name, ids));
+            }
+            _dumper?.Write("trinket_params_candidates", new
+            {
+                typeName = t.FullName,
+                candidates = allCandidates.Select(c => new { c.name, count = c.ids.Count, c.ids }).ToArray(),
+            });
+
+            var winner = allCandidates.FirstOrDefault(c => c.ids.Count >= 2);
+            if (winner.ids != null)
+            {
+                _dumper?.Write("trinket_offered_source", new { from = "params." + winner.name + " (discovered)", count = winner.ids.Count, ids = winner.ids });
+                foreach (var id in winner.ids) yield return id;
+            }
+            else
+            {
+                _dumper?.Write("trinket_offered_unresolved", new { reason = "no int-iterable with >=2 elements" });
             }
         }
 
