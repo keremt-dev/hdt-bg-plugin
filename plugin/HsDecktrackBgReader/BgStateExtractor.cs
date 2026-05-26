@@ -299,38 +299,97 @@ namespace HsDecktrackBgReader
                 }
             }
 
+            // No int-iterable matched. Offered trinkets may live as a list
+            // of objects (CardChoice / Card / DbfId-bearing record) instead.
+            // Walk every IEnumerable member and try to pull a DbfId int out
+            // of each item — works for List<Card>, List<{DbfId}>, etc.
             var t = source.GetType();
-            var allCandidates = new List<(string name, List<int> ids)>();
-            foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
-            {
-                object v = null;
-                try { v = p.GetValue(source); } catch { continue; }
-                var ids = ToIntList(v);
-                if (ids != null) allCandidates.Add(("prop:" + p.Name, ids));
-            }
-            foreach (var f in t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
-            {
-                object v = null;
-                try { v = f.GetValue(source); } catch { continue; }
-                var ids = ToIntList(v);
-                if (ids != null) allCandidates.Add(("field:" + f.Name, ids));
-            }
-            _dumper?.Write("trinket_params_candidates", new
-            {
-                typeName = t.FullName,
-                candidates = allCandidates.Select(c => new { c.name, count = c.ids.Count, c.ids }).ToArray(),
-            });
+            var allCandidates = new List<TrinketMemberProbe>();
+            var allMembers = new List<MemberInfo>();
+            foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) allMembers.Add(p);
+            foreach (var f in t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) allMembers.Add(f);
 
-            var winner = allCandidates.FirstOrDefault(c => c.ids.Count >= 2);
-            if (winner.ids != null)
+            foreach (var m in allMembers)
             {
-                _dumper?.Write("trinket_offered_source", new { from = "params." + winner.name + " (discovered)", count = winner.ids.Count, ids = winner.ids });
+                object v = null;
+                try { v = (m is PropertyInfo pp) ? pp.GetValue(source) : ((FieldInfo)m).GetValue(source); }
+                catch { continue; }
+                if (v == null) continue;
+
+                var prefix = m is PropertyInfo ? "prop:" : "field:";
+                var directInts = ToIntList(v);
+                if (directInts != null)
+                {
+                    allCandidates.Add(new TrinketMemberProbe { name = prefix + m.Name, kind = "int[]", count = directInts.Count, ids = directInts });
+                    continue;
+                }
+                // Try as enumerable of objects → extract DbfId
+                var via = ExtractDbfIdsFromObjectEnumerable(v);
+                if (via.ids != null)
+                {
+                    allCandidates.Add(new TrinketMemberProbe { name = prefix + m.Name, kind = "object[].DbfId", count = via.ids.Count, ids = via.ids, sample = via.sampleType });
+                }
+            }
+            _dumper?.Write("trinket_params_candidates", new { typeName = t.FullName, candidates = allCandidates });
+
+            // Prefer a candidate whose name contains 'trinket', then any
+            // >=2-element list. Single-element lists are almost certainly
+            // not the offer (BG offers 3 trinkets per pick).
+            var winner = allCandidates.FirstOrDefault(c => c.name.IndexOf("trinket", StringComparison.OrdinalIgnoreCase) >= 0 && c.ids.Count >= 2)
+                      ?? allCandidates.FirstOrDefault(c => c.ids.Count >= 2);
+            if (winner != null)
+            {
+                _dumper?.Write("trinket_offered_source", new { from = "params." + winner.name + " (discovered, " + winner.kind + ")", count = winner.ids.Count, ids = winner.ids });
                 foreach (var id in winner.ids) yield return id;
             }
             else
             {
-                _dumper?.Write("trinket_offered_unresolved", new { reason = "no int-iterable with >=2 elements" });
+                _dumper?.Write("trinket_offered_unresolved", new { reason = "no int-iterable or object-iterable yielding >=2 DbfIds" });
             }
+        }
+
+        private class TrinketMemberProbe
+        {
+            public string name;
+            public string kind;
+            public int count;
+            public List<int> ids;
+            public string sample;   // sample item type when extracting from objects
+        }
+
+        /// <summary>
+        /// If <paramref name="v"/> is IEnumerable&lt;some non-int object&gt;,
+        /// try to pull a numeric DbfId out of each item via a few likely
+        /// property names. Returns null when none of the items expose
+        /// anything int-like, so the caller can move on.
+        /// </summary>
+        private (List<int> ids, string sampleType) ExtractDbfIdsFromObjectEnumerable(object v)
+        {
+            if (v == null || v is string) return (null, null);
+            if (!(v is IEnumerable en)) return (null, null);
+
+            var candidateNames = new[] { "DbfId", "CardDbfId", "Id", "CardId", "TrinketDbfId" };
+            var ids = new List<int>();
+            string sampleType = null;
+            foreach (var item in en)
+            {
+                if (item == null) continue;
+                if (sampleType == null) sampleType = item.GetType().FullName;
+                int? found = null;
+                foreach (var name in candidateNames)
+                {
+                    var prop = GetMember(item, name);
+                    if (prop == null) continue;
+                    try
+                    {
+                        if (prop is int i) { found = i; break; }
+                        if (prop is IConvertible) { found = Convert.ToInt32(prop); break; }
+                    }
+                    catch { }
+                }
+                if (found.HasValue) ids.Add(found.Value);
+            }
+            return ids.Count > 0 ? (ids, sampleType) : (null, sampleType);
         }
 
         private static List<int> ToIntList(object v)
