@@ -258,7 +258,17 @@ namespace HsDecktrackBgReader
                 var paramsObj = GetMember(st, "Params");
                 if (paramsObj != null)
                 {
-                    foreach (var dbfId in EnumerateIntsFromAnyMember(paramsObj))
+                    // Confirmed schema (from HSReplay.dll reflection):
+                    //   BattlegroundsTrinketPickParams.OfferedTrinkets : OfferedTrinket[]
+                    //   OfferedTrinket.TrinketDbfId : int
+                    //   OfferedTrinket.ExtraData : int?
+                    // Read the typed path first; fall back to the generic
+                    // probe only if HSReplay renames things in a future version.
+                    var dbfIds = ReadOfferedTrinketDbfIds(paramsObj);
+                    if (dbfIds == null || dbfIds.Count == 0)
+                        dbfIds = EnumerateIntsFromAnyMember(paramsObj).ToList();
+
+                    foreach (var dbfId in dbfIds)
                     {
                         if (dbfId <= 0) continue;
                         var cardId = DbfIdToCardId(dbfId);
@@ -271,6 +281,27 @@ namespace HsDecktrackBgReader
                 result.Add(new TrinketPick { choiceId = choiceId, offered = offered.ToArray(), chosen = chosen });
             }
             return result;
+        }
+
+        /// <summary>
+        /// Typed read for HSReplay.Requests.BattlegroundsTrinketPickParams.
+        /// Returns null if the schema has drifted so callers can fall through
+        /// to the generic probe.
+        /// </summary>
+        private List<int> ReadOfferedTrinketDbfIds(object paramsObj)
+        {
+            var arr = GetMember(paramsObj, "OfferedTrinkets") as IEnumerable;
+            if (arr == null) return null;
+            var result = new List<int>();
+            foreach (var trinket in arr)
+            {
+                if (trinket == null) continue;
+                var dbf = GetMember(trinket, "TrinketDbfId");
+                if (dbf == null) continue;
+                try { result.Add(Convert.ToInt32(dbf)); } catch { }
+            }
+            if (result.Count > 0) _dumper?.Write("trinket_offered_source", new { from = "Params.OfferedTrinkets[].TrinketDbfId", count = result.Count, ids = result });
+            return result.Count > 0 ? result : null;
         }
 
         /// <summary>
