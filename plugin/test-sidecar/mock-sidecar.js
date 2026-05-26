@@ -11,9 +11,17 @@ const http = require('http');
 
 const CANNED = [
   null,                                                          // first 2s: no lobby yet (204)
-  { banned: [14, 23],         heroes: ['TB_BaconShop_HERO_36'] },
-  { banned: [14, 23, 17],     heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43'] },
-  { banned: [14, 23, 17, 28], heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43', 'BG31_HERO_802', 'BG22_HERO_001'] },
+  { banned: [14, 23],         heroes: ['TB_BaconShop_HERO_36'], trinkets: [] },
+  { banned: [14, 23, 17],     heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43'], trinkets: [] },
+  { banned: [14, 23, 17, 28], heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43', 'BG31_HERO_802', 'BG22_HERO_001'],
+    trinkets: [
+      { choiceId: 1, chosen: null, offered: ['BG30_MagicItem_847', 'BG30_MagicItem_510', 'BG30_MagicItem_842'] },
+    ] },
+  { banned: [14, 23, 17, 28, 11], heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43', 'BG31_HERO_802', 'BG22_HERO_001'],
+    trinkets: [
+      { choiceId: 1, chosen: 'BG30_MagicItem_847', offered: ['BG30_MagicItem_847', 'BG30_MagicItem_510', 'BG30_MagicItem_842'] },
+      { choiceId: 2, chosen: null,                 offered: ['BG30_MagicItem_413', 'BG30_MagicItem_812', 'BG30_MagicItem_902'] },
+    ] },
 ];
 
 let tick = 0;

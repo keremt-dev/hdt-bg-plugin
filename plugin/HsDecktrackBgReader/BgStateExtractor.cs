@@ -110,15 +110,21 @@ namespace HsDecktrackBgReader
 
                 var heroes = ExtractOfferedHeroes(game);
                 var banned = ExtractBannedTribes(game);
+                var trinkets = ExtractTrinketPicks(game);
 
-                if (heroes.Count == 0 && banned.Count == 0)
+                if (heroes.Count == 0 && banned.Count == 0 && trinkets.Count == 0)
                 {
-                    _dumper?.Write("extract_empty", new { reason = "no heroes and no banned tribes inferred" });
+                    _dumper?.Write("extract_empty", new { reason = "no heroes, no banned tribes, no trinket picks" });
                     return null;
                 }
 
-                _dumper?.Write("extract_ok", new { heroes, banned });
-                return new LobbySnapshot { banned = banned.ToArray(), heroes = heroes.ToArray() };
+                _dumper?.Write("extract_ok", new { heroes, banned, trinkets });
+                return new LobbySnapshot
+                {
+                    banned = banned.ToArray(),
+                    heroes = heroes.ToArray(),
+                    trinkets = trinkets.ToArray(),
+                };
             }
             catch (Exception ex)
             {
@@ -210,6 +216,125 @@ namespace HsDecktrackBgReader
             if (string.IsNullOrEmpty(cardId)) return cardId;
             var m = HeroCanonicalPrefixRegex.Match(cardId);
             return m.Success ? m.Value : cardId;
+        }
+
+        // ──────────────────────────────────────────────────────────────────
+        // TRINKETS
+        //   Source: Core.Game.BattlegroundsTrinketPickStates - a List of
+        //   BattlegroundsTrinketPickState, each with ChoiceId (1=lesser,
+        //   2=greater), Params (a BattlegroundsTrinketPickParams instance
+        //   that carries the offered DbfIds — exact property name is not
+        //   in our spike type catalogue, so we discover it by walking the
+        //   Params object for any int-enumerable property), and
+        //   ChosenTrinketDbfId.
+        // ──────────────────────────────────────────────────────────────────
+
+        private List<TrinketPick> ExtractTrinketPicks(object game)
+        {
+            var result = new List<TrinketPick>();
+            var states = GetMember(game, "BattlegroundsTrinketPickStates") as IEnumerable;
+            if (states == null) return result;
+
+            foreach (var st in states)
+            {
+                if (st == null) continue;
+                var choiceObj = GetMember(st, "ChoiceId");
+                int choiceId = 0;
+                try { if (choiceObj != null) choiceId = Convert.ToInt32(choiceObj); } catch { }
+
+                var chosenObj = GetMember(st, "ChosenTrinketDbfId");
+                string chosen = null;
+                if (chosenObj != null)
+                {
+                    try
+                    {
+                        var dbf = Convert.ToInt32(chosenObj);
+                        if (dbf > 0) chosen = DbfIdToCardId(dbf);
+                    }
+                    catch { }
+                }
+
+                var offered = new List<string>();
+                var paramsObj = GetMember(st, "Params");
+                if (paramsObj != null)
+                {
+                    foreach (var dbfId in EnumerateIntsFromAnyMember(paramsObj))
+                    {
+                        if (dbfId <= 0) continue;
+                        var cardId = DbfIdToCardId(dbfId);
+                        if (!string.IsNullOrEmpty(cardId) && !offered.Contains(cardId))
+                            offered.Add(cardId);
+                    }
+                }
+
+                if (offered.Count == 0 && chosen == null) continue;   // empty pick state
+                result.Add(new TrinketPick { choiceId = choiceId, offered = offered.ToArray(), chosen = chosen });
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// BattlegroundsTrinketPickParams' property name for the offered
+        /// trinkets isn't in our reflection probe. Walk every public/internal
+        /// property+field on the params object and yield ints from the first
+        /// enumerable-of-ints we encounter. Looks for common names first as
+        /// a fast path so the dump points to the right field name.
+        /// </summary>
+        private IEnumerable<int> EnumerateIntsFromAnyMember(object source)
+        {
+            if (source == null) yield break;
+            var fastPathNames = new[] { "OfferedTrinketDbfIds", "TrinketDbfIds", "Choices", "Options", "Trinkets", "DbfIds" };
+            foreach (var name in fastPathNames)
+            {
+                var v = GetMember(source, name);
+                var ids = ToIntList(v);
+                if (ids != null)
+                {
+                    _dumper?.Write("trinket_offered_source", new { from = "params." + name, count = ids.Count });
+                    foreach (var id in ids) yield return id;
+                    yield break;
+                }
+            }
+
+            var t = source.GetType();
+            foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                object v = null;
+                try { v = p.GetValue(source); } catch { continue; }
+                var ids = ToIntList(v);
+                if (ids != null && ids.Count > 0)
+                {
+                    _dumper?.Write("trinket_offered_source", new { from = "params." + p.Name + " (discovered)", count = ids.Count });
+                    foreach (var id in ids) yield return id;
+                    yield break;
+                }
+            }
+            foreach (var f in t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                object v = null;
+                try { v = f.GetValue(source); } catch { continue; }
+                var ids = ToIntList(v);
+                if (ids != null && ids.Count > 0)
+                {
+                    _dumper?.Write("trinket_offered_source", new { from = "params." + f.Name + "(field discovered)", count = ids.Count });
+                    foreach (var id in ids) yield return id;
+                    yield break;
+                }
+            }
+        }
+
+        private static List<int> ToIntList(object v)
+        {
+            if (v == null || v is string) return null;
+            if (!(v is IEnumerable en)) return null;
+            var list = new List<int>();
+            foreach (var item in en)
+            {
+                if (item == null) continue;
+                try { list.Add(Convert.ToInt32(item)); }
+                catch { return null; }    // not a numeric-iterable
+            }
+            return list.Count > 0 ? list : null;
         }
 
         private List<string> HeroesFromEntities(object game)
@@ -591,7 +716,7 @@ namespace HsDecktrackBgReader
 
         private static string SerializeLobby(LobbySnapshot s)
         {
-            var sb = new StringBuilder(128);
+            var sb = new StringBuilder(256);
             sb.Append("{\"banned\":[");
             if (s.banned != null)
                 for (int i = 0; i < s.banned.Length; i++)
@@ -600,22 +725,46 @@ namespace HsDecktrackBgReader
                     sb.Append(s.banned[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
                 }
             sb.Append("],\"heroes\":[");
-            if (s.heroes != null)
-                for (int i = 0; i < s.heroes.Length; i++)
+            if (s.heroes != null) AppendStringArray(sb, s.heroes);
+            sb.Append("],\"trinkets\":[");
+            if (s.trinkets != null)
+            {
+                for (int i = 0; i < s.trinkets.Length; i++)
                 {
                     if (i > 0) sb.Append(',');
-                    var h = s.heroes[i] ?? "";
-                    sb.Append('"');
-                    foreach (var c in h)
-                    {
-                        if (c == '\\' || c == '"') sb.Append('\\').Append(c);
-                        else if (c < 0x20) sb.Append("\\u").Append(((int)c).ToString("x4"));
-                        else sb.Append(c);
-                    }
-                    sb.Append('"');
+                    var t = s.trinkets[i];
+                    sb.Append("{\"choiceId\":").Append(t.choiceId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append(",\"offered\":[");
+                    if (t.offered != null) AppendStringArray(sb, t.offered);
+                    sb.Append("],\"chosen\":");
+                    if (t.chosen == null) sb.Append("null");
+                    else { sb.Append('"'); AppendJsonStringChars(sb, t.chosen); sb.Append('"'); }
+                    sb.Append('}');
                 }
+            }
             sb.Append("]}");
             return sb.ToString();
+        }
+
+        private static void AppendStringArray(StringBuilder sb, string[] arr)
+        {
+            for (int i = 0; i < arr.Length; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append('"');
+                AppendJsonStringChars(sb, arr[i] ?? "");
+                sb.Append('"');
+            }
+        }
+
+        private static void AppendJsonStringChars(StringBuilder sb, string s)
+        {
+            foreach (var c in s)
+            {
+                if (c == '\\' || c == '"') sb.Append('\\').Append(c);
+                else if (c < 0x20) sb.Append("\\u").Append(((int)c).ToString("x4"));
+                else sb.Append(c);
+            }
         }
     }
 
@@ -623,5 +772,13 @@ namespace HsDecktrackBgReader
     {
         public int[] banned { get; set; }
         public string[] heroes { get; set; }
+        public TrinketPick[] trinkets { get; set; }
+    }
+
+    internal class TrinketPick
+    {
+        public int choiceId { get; set; }
+        public string[] offered { get; set; }
+        public string chosen { get; set; }
     }
 }

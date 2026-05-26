@@ -170,6 +170,10 @@ const TRIBE_BY_KEY = Object.fromEntries(TRIBES.map(t=>[t.name.toLowerCase(),t]))
 // Card ID -> tribe keys, generated from hearthstonejson.com. Used by
 // the comp filter to drop comps whose CORE cards predominantly require
 // banned tribes (cards with multiple races count if ANY is banned).
+// Trinket cardId -> human name. Same source as CARD_RACES; covers the
+// 207 trinkets Firestone has stats for. Mid-game trinket picks render the
+// name instead of the raw cardId.
+const TRINKET_NAMES = {"BG30_MagicItem_847":"Goblin Wallet","BG30_MagicItem_876":"Manipulator Portrait","BG30_MagicItem_303":"Automaton Portrait","BG32_MagicItem_366":"Guiding Candle","BG30_MagicItem_707":"Tickatus Sticker","BG35_MagicItem_156":"Flaming Portrait","BG30_MagicItem_804":"Ancient Wishbone","BG30_MagicItem_406":"Butcher's Sickle","BG32_MagicItem_428":"Worn Treasure Map","BG35_MagicItem_931t":"Transcribing Typewriter","BG30_MagicItem_888":"Souvenir Stand","BG32_MagicItem_361t":"Portable Factory","BG35_MagicItem_872":"Ophidian Staff","BG35_MagicItem_816":"Orb of the Unknown","BG35_MagicItem_850t":"Pocket Cyclone","BG32_MagicItem_858":"Explorer's Binoculars","BG35_MagicItem_733":"Jailer Sticker","BG30_MagicItem_301":"Eternal Portrait","BG32_MagicItem_270t":"Wicked Tome","BG30_MagicItem_891":"Trip Vouchers","BG35_MagicItem_848t":"Egg of the Endtimes Portrait","BG35_MagicItem_930":"Warband Whistle","BG35_MagicItem_741":"Beatboxer Portrait","BG35_MagicItem_815":"Magician's Top Hat","BG30_MagicItem_993":"Pagle's Fishing Rod","BG32_MagicItem_350":"Splinter of Aurum","BG32_MagicItem_807":"Curator Sticker","BG30_MagicItem_706":"Reflective Pendant","BG35_MagicItem_920":"Bubble Crown","BG35_MagicItem_820":"Safety Patch","BG32_MagicItem_362t":"Innkeeper's Hearth","BG30_MagicItem_426":"Colorful Compass","BG35_MagicItem_753":"Murky Sticker","BG35_MagicItem_300":"Copper Coil","BG30_MagicItem_426t":"Colorful Compass","BG32_MagicItem_803":"Macaw Portrait","BG30_MagicItem_943":"Surveyor Portrait","BG32_MagicItem_957":"Grifter Portrait","BG35_MagicItem_712":"Privateer Portrait","BG30_MagicItem_435":"Goldenizer Supply","BG30_MagicItem_995":"Bronze Timepiece","BG32_MagicItem_817":"Rendle Sticker","BG35_MagicItem_821t":"Kaleidoscope","BG32_MagicItem_232":"Shark Cannon","BG35_MagicItem_840":"Chromatic Tear","BG30_MagicItem_418":"Bronzebeard Portrait","BG35_MagicItem_924":"Groundbreaker Portrait","BG35_MagicItem_301":"Scraper Sticker","BG30_MagicItem_545":"Fridge Magnet","BG30_MagicItem_998":"Bob-blehead","BG32_MagicItem_301":"Bassgill Portrait","BG30_MagicItem_423":"Innkeeper's Stein","BG35_MagicItem_931":"Transcribing Typewriter","BG35_MagicItem_842":"Egg of the Endtimes Portrait","BG30_MagicItem_546":"Jar o' Gems","BG32_MagicItem_901":"Gold-plated Compass","BG32_MagicItem_361":"Portable Factory","BG30_MagicItem_700":"Deathly Phylactery","BG35_MagicItem_701":"Fang Anklet","BG32_MagicItem_821":"Pilgrimp Sticker","BG30_MagicItem_541":"Nether Pendant","BG30_MagicItem_410":"Quilligraphy Set","BG32_MagicItem_364":"Poet Portrait","BG30_MagicItem_703":"Mystery Cube","BG35_MagicItem_923":"Bewitched Ribbon","BG30_MagicItem_416":"Token of the Old Gods","BG32_MagicItem_367":"Ghastly Sticker","BG35_MagicItem_821":"Kaleidoscope","BG30_MagicItem_828":"Shaker Portrait","BG32_MagicItem_930":"Archaic Scroll","BG30_MagicItem_841":"Glowing Gauntlet","BG30_MagicItem_420t":"Book of Medivh","BG30_MagicItem_705":"Bartend-o-Tron's Oilcan","BG30_MagicItem_996":"Bob's Tip Jar","BG30_MagicItem_422":"Lorewalker Scroll","BG35_MagicItem_925":"Coral Spear","BG30_MagicItem_713":"Bleeding Heart","BG35_MagicItem_921":"Cowrie Necklace","BG30_MagicItem_900":"Dragonwing Glider","BG30_MagicItem_902":"Holy Mallet","BG35_MagicItem_309":"Errgl Sticker","BG30_MagicItem_924":"Booty Bay Brew","BG30_MagicItem_439":"Designer Eyepatch","BG32_MagicItem_931":"Azsharan Statuette","BG30_MagicItem_422t":"Lorewalker Scroll","BG30_MagicItem_942":"Mecha-Jaraxxus Sticker","BG35_MagicItem_710":"Miniature Ship","BG35_MagicItem_922":"Tide Raiser Portrait","BG32_MagicItem_300":"Putricide Sticker","BG30_MagicItem_425":"Azeroth Model Globe","BG35_MagicItem_742":"Accord-o-Tron Portrait","BG32_MagicItem_172":"Boom's Monster Portrait","BG35_MagicItem_840t":"Chromatic Tear","BG30_MagicItem_434":"Replica Cathedral","BG30_MagicItem_420":"Book of Medivh","BG31_MagicItem_903":"Wisdomball Supply","BG32_MagicItem_360":"Baleful Incense","BG30_MagicItem_914":"Nerglish Phrasebook","BG30_MagicItem_989t":"Artisanal Urn","BG32_MagicItem_283":"Czarina Portrait","BG32_MagicItem_416":"War Drum","BG30_MagicItem_547":"Comfy Coffin","BG35_MagicItem_711":"Protective Ring","BG32_MagicItem_306":"Herald Sticker","BG30_MagicItem_920":"Spitescale Sushi Roll","BG32_MagicItem_894":"Blessing Portrait","BG32_MagicItem_922":"Charming Panpipes","BG35_MagicItem_300t":"Copper Coil","BG35_MagicItem_863":"Avalanche Sticker","BG32_MagicItem_926":"Morgl Portrait","BG35_MagicItem_890":"Sunken Anchor","BG35_MagicItem_714":"Powder Keg","BG30_MagicItem_544":"Nomi Sticker","BG35_MagicItem_812":"Corrupted Tome","BG32_MagicItem_822":"Bazaar Sticker","BG35_MagicItem_870":"Leapfrogger Portrait","BG30_MagicItem_431":"Azerite Portrait","BG35_MagicItem_151":"Defiler Portrait","BG32_MagicItem_170":"Spell-powered Wrench","BG35_MagicItem_743":"Electrode Attractor","BG35_MagicItem_871":"Mama Bear Sticker","BG32_MagicItem_831":"Sellemental Portrait","BG35_MagicItem_150":"Cursed Crystal","BG35_MagicItem_151t":"Defiler Portrait","BG35_MagicItem_817":"Lens Case","BG30_MagicItem_944":"Redeemer Portrait","BG35_MagicItem_850":"Pocket Cyclone","BG30_MagicItem_879t":"Dalaran Cheese Wheel","BG30_MagicItem_914t":"Nerglish Phrasebook","BG32_MagicItem_830":"Felemental Portrait","BG30_MagicItem_987":"Balladist Portrait","BG32_MagicItem_951":"Gold Pendant","BG32_MagicItem_200":"All-Purpose Kibble","BG30_MagicItem_917":"Rusty Trident","BG32_MagicItem_363":"Faerie Dragon Scale","BG35_MagicItem_430":"Scrapsmith Portrait","BG35_MagicItem_713":"Trusty Crowbar","BG30_MagicItem_547t":"Comfy Coffin","BG30_MagicItem_410t2":"Quilligraphy Set","BG35_MagicItem_752":"Young Murk-Eye Sticker","BG32_MagicItem_284":"Aggem Sticker","BG35_MagicItem_302":"Stormcoil Sticker","BG30_MagicItem_701":"The Eye of Sargeras","BG35_MagicItem_702":"Stegodon Portrait","BG35_MagicItem_154":"Ur'zul Sticker","BG35_MagicItem_851":"Water Wheel","BG32_MagicItem_888":"Recycling Sticker","BG30_MagicItem_544t":"Nomi Sticker","BG30_MagicItem_994":"Yogg-Tastic Pastry","BG32_MagicItem_808":"Bloodbound Earrings","BG35_MagicItem_432":"Blood Amulet","BG30_MagicItem_430":"Rockin' Music Box","BG30_MagicItem_310":"Rivendare Portrait","BG30_MagicItem_411":"Hoggy Bank","BG35_MagicItem_431t":"Thornspike Pauldron","BG30_MagicItem_427":"Tiger Carving","BG35_MagicItem_306":"Jailer Sticker","BG32_MagicItem_271":"Ornate Clock","BG30_MagicItem_437":"Staff of the Scourge","BG30_MagicItem_931":"Lucky Tabby","BG30_MagicItem_864":"Gilnean Thorned Rose","BG30_MagicItem_919":"Nazjatar Postcard","BG35_MagicItem_862":"Upstart Embers","BG30_MagicItem_555":"Surprise Portrait","BG30_MagicItem_868":"Rewinder Portrait","BG30_MagicItem_999":"Fancy Spellbook","BG30_MagicItem_924t":"Booty Bay Brew","BG35_MagicItem_700":"Wildfeather Duster","BG30_MagicItem_540":"Slamma Sticker","BG30_MagicItem_886":"Reinforced Shield","BG35_MagicItem_434":"Jewelry Box","BG30_MagicItem_442":"Blood Golem Sticker","BG32_MagicItem_998":"Behemoth Portrait","BG32_MagicItem_808t":"Bloodbound Earrings","BG30_MagicItem_821":"Fish Portrait","BG35_MagicItem_305":"Conch Portrait","BG35_MagicItem_750":"Magicfin Sticker","BG32_MagicItem_893":"Bluegill Flippers","BG35_MagicItem_754":"Dramaloc Sticker","BG35_MagicItem_152":"Demonic Tapestry","BG32_MagicItem_276":"Enigmatic Headstone","BG30_MagicItem_988t":"Great Boar Sticker","BG30_MagicItem_988":"Great Boar Sticker","BG32_MagicItem_801t":"Heart of the Forest","BG30_MagicItem_951":"Lava Lamp","BG30_MagicItem_427t":"Tiger Carving","BG30_MagicItem_403":"Ironforge Anvil","BG35_MagicItem_861":"Baller Portrait","BG32_MagicItem_400":"Shrine of Evolution","BG32_MagicItem_844":"Sacrificial Altar","BG30_MagicItem_981":"The Eye of Dalaran","BGDUO_MagicItem_010":"Empowered Mirror","BGDUO_MagicItem_010t":"Empowered Mirror","BG35_MagicItem_849":"Cloud Serpent Horn","BG30_MagicItem_986":"Peacebloom Candle","BG30_MagicItem_978":"Blingtron's Sunglasses","BG30_MagicItem_548":"Glowscale Portrait","BG35_MagicItem_310":"Radio Star Portrait","BG32_MagicItem_954":"Auric Offering","BG32_MagicItem_806":"Battlecruiser Portrait","BG30_MagicItem_433":"Alliance Keychain","BG32_MagicItem_417":"Tarecgosa Sticker","BG30_MagicItem_900t":"Dragonwing Glider","BG35_MagicItem_155":"Felburned Ledger","BG32_MagicItem_282":"Turbocharged Drill","BG35_MagicItem_303":"Skipper Portrait","BGDUO_MagicItem_005":"Bottle Sticker"};
 const CARD_RACES = {"BG34_321":["beast"],"BG29_807":["beast"],"BG26_801":["beast"],"BG34_523":["beast"],"BGS_078":["beast"],"BG27_084":["beast"],"BG29_806":["beast"],"BG35_601":["beast"],"BG33_840":["beast"],"BG33_371":["mech","beast"],"BG35_604":["beast"],"BG26_800":["beast"],"BG19_010":["beast"],"BG25_806":["beast"],"BG35_155":["demon"],"BG32_821":["demon","dragon"],"BG32_891":["demon"],"BG35_152":["demon"],"BG31_871":["demon"],"BG32_873":["demon"],"BG35_151":["demon"],"BG35_150":["demon"],"BG35_153":["demon"],"BGS_041":["dragon"],"BG29_813":["dragon"],"BG29_815":["undead","dragon"],"BG34_633":["dragon"],"BG32_822":["dragon"],"BG34_731":["dragon"],"BG34_632":["dragon"],"BG24_500":["dragon"],"BG33_891":["murloc"],"BG31_818":["elemental"],"BG31_816":["elemental"],"BGS_119":["elemental"],"BG26_174":["demon"],"BG_GVG_085":["mech"],"BG29_611":["mech"],"BG32_236":["pirate"],"BG26_157":["quilboar"],"BG35_437":["quilboar"],"BG32_430":["quilboar"],"BG35_433":["quilboar"],"BG34_630":["dragon"],"BG26_867":["quilboar"],"BG35_434":["quilboar"],"BG25_039":["quilboar","naga"],"BG25_155":["quilboar"],"BG26_159":["quilboar"],"BG26_160":["quilboar"],"BG23_017":["quilboar"],"BG30_123":["quilboar"],"BG_TTN_401":["mech"],"BG_DEEP_015":["undead","mech"],"BG32_172":["mech"],"BG26_148":["mech"],"BG35_342":["mech"],"BG_BOT_911":["mech"],"BG33_809":["mech"],"BGS_071":["mech"],"BG28_741":["mech"],"BG35_142":["murloc"],"BG27_556":["murloc"],"BG34_140":["murloc"],"BG35_140":["murloc"],"BG35_141":["murloc"],"BGS_020":["murloc"],"BG33_318":["murloc"],"BG26_137":["murloc"],"BG30_122":["murloc"],"BG26_354":["murloc"],"BG22_202":["murloc"],"BG32_330":["murloc"],"BG23_008":["naga"],"BG26_502":["naga"],"BG26_505":["naga"],"BG34_500":["elemental","demon"],"BG35_881":["elemental"],"BG23_009":["naga"],"BG33_823":["pirate"],"BG33_825":["pirate"],"BG33_822":["pirate"],"BG27_005":["dragon","pirate"],"BG35_700":["pirate"],"BG35_701":["pirate"],"BG32_835":["naga"],"BG33_821":["pirate"],"BG25_010":["undead"],"BG32_324":["undead"],"BG31_835":["undead"],"BG25_009":["undead"],"BG34_694":["undead"],"BG34_690":["undead"],"BG32_880":["undead"],"BG35_334":["undead"],"BG30_129":["undead"],"BG30_125":["undead"],"BG27_004":["naga","beast"],"BG24_005":["undead","beast"],"BG34_921":["naga","dragon"],"BG34_922":["naga"],"BG26_175":["elemental"],"BGS_123":["elemental"],"BGS_116":["elemental"],"BG28_707":["elemental"],"BG34_858":["elemental"],"BG26_802":["beast"],"BG35_602":["beast"],"BGS_018":["beast"],"BG34_926":["naga"],"BG34_635t":["dragon"]};
 
 const HEROES = [["A. F. Kay","TB_BaconShop_HERO_16"],["Al'Akir","TB_BaconShop_HERO_76"],["Alexstrasza","TB_BaconShop_HERO_56"],["Ambassador Faelin","BG22_HERO_201"],["Aranna Starseeker","TB_BaconShop_HERO_59"],["Arch-Villain Rafaam","TB_BaconShop_HERO_45"],["Artanis","BG31_HERO_802"],["Bru'kan","BG22_HERO_001"],["Buttons","BG32_HERO_002"],["C'Thun","TB_BaconShop_HERO_29"],["Cap'n Hoggarr","BG26_HERO_101"],["Captain Eudora","TB_BaconShop_HERO_64"],["Captain Hooktusk","TB_BaconShop_HERO_67"],["Cariel Roame","BG21_HERO_000"],["Chenvaala","TB_BaconShop_HERO_78"],["Cookie the Cook","BG21_HERO_020"],["Dancin' Deryl","TB_BaconShop_HERO_36"],["Death Speaker Blackthorn","BG20_HERO_103"],["Deathwing","TB_BaconShop_HERO_52"],["Dinotamer Brann","TB_BaconShop_HERO_43"],["Doctor Holli'dae","BG28_HERO_801"],["Drek'Thar","BG22_HERO_002"],["E.T.C., Band Manager","BG25_HERO_105"],["Edwin VanCleef","TB_BaconShop_HERO_01"],["Elise Starseeker","TB_BaconShop_HERO_42"],["Enhance-o Mechano","BG24_HERO_204"],["Exarch Othaar","BG31_HERO_006"],["Farseer Nobundo","BG31_HERO_003"],["Forest Lord Cenarius","BG32_HERO_001"],["Forest Warden Omu","TB_BaconShop_HERO_74"],["Fungalmancer Flurgl","TB_BaconShop_HERO_55"],["Galakrond","TB_BaconShop_HERO_02"],["Galewing","BG20_HERO_283"],["Genn, Worgen King","BG35_HERO_001"],["George the Fallen","TB_BaconShop_HERO_15"],["Greybough","TB_BaconShop_HERO_95"],["Guff Runetotem","BG20_HERO_242"],["Heistbaron Togwaggle","BG23_HERO_305"],["Illidan Stormrage","TB_BaconShop_HERO_08"],["Infinite Toki","TB_BaconShop_HERO_28"],["Inge, the Iron Hymn","BG26_HERO_102"],["Ini Stormcoil","BG22_HERO_200"],["Jandice Barov","TB_BaconShop_HERO_71"],["Jim Raynor","BG31_HERO_801"],["Kael'thas Sunstrider","TB_BaconShop_HERO_60"],["Kerrigan, Queen of Blades","BG31_HERO_811"],["King Mukla","TB_BaconShop_HERO_38"],["Kurtrus Ashfallen","BG20_HERO_280"],["Lady Vashj","BG23_HERO_304"],["Lich Baz'hial","TB_BaconShop_HERO_25"],["Loh, the Living Legend","BG33_HERO_001"],["Lord Barov","TB_BaconShop_HERO_72"],["Lord Jaraxxus","TB_BaconShop_HERO_37"],["Maiev Shadowsong","TB_BaconShop_HERO_62"],["Malygos","TB_BaconShop_HERO_58"],["Marin the Manager","BG30_HERO_304"],["Master Nguyen","BG20_HERO_202"],["Millhouse Manastorm","TB_BaconShop_HERO_49"],["Millificent Manastorm","TB_BaconShop_HERO_17"],["Mister Clocksworth","BG34_HERO_002"],["Morchie","BG34_HERO_004"],["Mr. Bigglesworth","TB_BaconShop_HERO_70"],["Murloc Holmes","BG23_HERO_303"],["Murozond, Unbounded","BG34_HERO_000"],["Mutanus the Devourer","BG20_HERO_301"],["N'Zoth","TB_BaconShop_HERO_93"],["Nozdormu","TB_BaconShop_HERO_57"],["Onyxia","BG22_HERO_305"],["Overlord Saurfang","BG20_HERO_102"],["Ozumat","BG23_HERO_201"],["Patches the Pirate","TB_BaconShop_HERO_18"],["Patchwerk","TB_BaconShop_HERO_34"],["Professor Putricide","BG25_HERO_100"],["Pyramad","TB_BaconShop_HERO_39"],["Queen Azshara","BG22_HERO_007"],["Queen Wagtoggle","TB_BaconShop_HERO_14"],["Ragnaros the Firelord","TB_BaconShop_HERO_11"],["Rakanishu","TB_BaconShop_HERO_75"],["Reno Jackson","TB_BaconShop_HERO_41"],["Rock Master Voone","BG26_HERO_104"],["Rokara","BG20_HERO_100"],["Scabbs Cutterbutter","BG21_HERO_010"],["Shudderwock","TB_BaconShop_HERO_23"],["Silas Darkmoon","TB_BaconShop_HERO_90"],["Sindragosa","TB_BaconShop_HERO_27"],["Sir Finley Mrrgglton","TB_BaconShop_HERO_40"],["Sire Denathrius","BG24_HERO_100"],["Skycap'n Kragg","TB_BaconShop_HERO_68"],["Snake Eyes","BG28_HERO_400"],["Sneed","BG21_HERO_030"],["Sylvanas Windrunner","BG23_HERO_306"],["Tae'thelan Bloodwatcher","BG28_HERO_800"],["Tamsin Roame","BG20_HERO_282"],["Tavish Stormpike","BG22_HERO_000"],["Teron Gorefiend","BG25_HERO_103"],["Tess Greymane","TB_BaconShop_HERO_50"],["The Curator","TB_BaconShop_HERO_33"],["The Great Akazamzarak","TB_BaconShop_HERO_21"],["The Jailer","TB_BaconShop_HERO_702"],["The Lich King","TB_BaconShop_HERO_22"],["The Rat King","TB_BaconShop_HERO_12"],["Thorim, Stormlord","BG27_HERO_801"],["Tickatus","TB_BaconShop_HERO_94"],["Time Twister Chromie","BG34_HERO_001"],["Trade Prince Gallywix","TB_BaconShop_HERO_10"],["Vanndar Stormpike","BG22_HERO_003"],["Varden Dawngrasp","BG22_HERO_004"],["Vol'jin","BG20_HERO_201"],["Xyrella","BG20_HERO_101"],["Y'Shaarj","TB_BaconShop_HERO_92"],["Yogg-Saron, Hope's End","TB_BaconShop_HERO_35"],["Ysera","TB_BaconShop_HERO_53"],["Zephrys, the Great","TB_BaconShop_HERO_91"],["Zerek, Master Cloner","BG31_HERO_005"]].map(([name,id])=>({name,id}));
@@ -191,6 +195,8 @@ const state = {
   autoAnalyze: false,
   autoAnalyzeTimer: null,
   lastAutoAnalyzedSig: '',
+  trinketStats: {},      // cardId -> firestone trinket stat row
+  lobbyTrinkets: [],     // [{choiceId, offered: [cardId], chosen: cardId|null}] from the plugin
 };
 
 // ─────────────────────────────────────────── TRIBES UI
@@ -293,9 +299,10 @@ renderSlots();
 
 // ─────────────────────────────────────────── FETCH + ANALYZE
 const fmtNum = n => n.toLocaleString('tr-TR');
-const HERO_STATS_URL = (mmr, period) => `https://static.zerotoheroes.com/api/bgs/hero-stats/mmr-${mmr}/${period}/overview-from-hourly.gz.json`;
-const COMP_STATS_URL = (period)     => `https://static.zerotoheroes.com/api/bgs/comp-stats/${period}/overview-from-hourly.gz.json`;
-const COMP_STRATEGIES_URL           = `https://static.zerotoheroes.com/hearthstone/data/battlegrounds-strategies/bgs-comps-strategies.gz.json`;
+const HERO_STATS_URL    = (mmr, period) => `https://static.zerotoheroes.com/api/bgs/hero-stats/mmr-${mmr}/${period}/overview-from-hourly.gz.json`;
+const COMP_STATS_URL    = (period)       => `https://static.zerotoheroes.com/api/bgs/comp-stats/${period}/overview-from-hourly.gz.json`;
+const TRINKET_STATS_URL = (period)       => `https://static.zerotoheroes.com/api/bgs/trinket-stats/${period}/overview-from-hourly.gz.json`;
+const COMP_STRATEGIES_URL                = `https://static.zerotoheroes.com/hearthstone/data/battlegrounds-strategies/bgs-comps-strategies.gz.json`;
 
 async function fetchJSON(url){
   const r = await fetch(url);
@@ -320,13 +327,17 @@ analyzeBtn.onclick = async () => {
   resultsEl.innerHTML = skeleton();
 
   try {
-    const [hero, comp, strat] = await Promise.all([
+    const [hero, comp, strat, trinket] = await Promise.all([
       fetchJSON(HERO_STATS_URL(state.mmr, state.period)),
       fetchJSON(COMP_STATS_URL(state.period)),
       fetchJSON(COMP_STRATEGIES_URL).catch(()=>[]),
+      fetchJSON(TRINKET_STATS_URL(state.period)).catch(()=>null),
     ]);
     state.data = hero; state.comps = comp;
     state.strategies = Object.fromEntries((strat||[]).filter(s=>s.compId).map(s=>[s.compId, s]));
+    state.trinketStats = trinket && trinket.trinketStats
+      ? Object.fromEntries(trinket.trinketStats.map(t => [t.trinketCardId, t]))
+      : {};
     document.getElementById('snapshot').textContent =
       `snapshot ${new Date(hero.lastUpdateDate).toISOString().replace('T',' ').slice(0,16)}Z · ${fmtNum(hero.dataPoints)} games`;
     render();
@@ -382,6 +393,7 @@ async function pollLive(){
       state.liveLastJson = '';
       state.banned = new Set();
       state.heroes = [null, null, null, null];
+      state.lobbyTrinkets = [];
       state.lastAutoAnalyzedSig = '';
       state.data = null;
       state.comps = null;
@@ -435,6 +447,7 @@ function maybeAutoAnalyze(){
 function applyLiveLobby(lobby){
   const bannedArr = Array.isArray(lobby?.banned) ? lobby.banned : [];
   const heroesArr = Array.isArray(lobby?.heroes) ? lobby.heroes : [];
+  const trinketsArr = Array.isArray(lobby?.trinkets) ? lobby.trinkets : [];
 
   // Tribes: keep only known tribe IDs, drop unknowns.
   const validTribeIds = new Set(TRIBES.map(t=>t.id));
@@ -460,9 +473,25 @@ function applyLiveLobby(lobby){
     renderSlots();
     changed = true;
   }
+  if (!trinketsEqual(state.lobbyTrinkets, trinketsArr)){
+    state.lobbyTrinkets = trinketsArr;
+    changed = true;
+  }
   if (changed && state.data) {
     render();
   }
+}
+
+function trinketsEqual(a, b){
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++){
+    if (a[i].choiceId !== b[i].choiceId) return false;
+    if ((a[i].chosen||null) !== (b[i].chosen||null)) return false;
+    const ao = a[i].offered || [], bo = b[i].offered || [];
+    if (ao.length !== bo.length) return false;
+    for (let j = 0; j < ao.length; j++) if (ao[j] !== bo[j]) return false;
+  }
+  return true;
 }
 
 function setsEqual(a, b){
@@ -597,10 +626,28 @@ function render(){
     .filter(Boolean)
     .sort((a, b) => a.best.avg - b.best.avg);
 
+  // 4) Trinket picks (mid-game offers, only present when Live mode is on
+  //    AND the player is at a trinket pick screen).
+  const trinketRows = (state.lobbyTrinkets || []).map(pick => {
+    const offered = (pick.offered || []).map(cardId => {
+      const stat = state.trinketStats[cardId];
+      const atMmr = stat?.averagePlacementAtMmr?.find(x => x.mmr === state.mmr)
+                 || stat?.averagePlacementAtMmr?.find(x => x.mmr === 100);
+      return {
+        cardId,
+        name: TRINKET_NAMES[cardId] || cardId,
+        avg: atMmr ? atMmr.placement : (stat?.averagePlacement ?? null),
+        dp:  atMmr ? atMmr.dataPoints : (stat?.dataPoints ?? null),
+      };
+    }).sort((a,b) => (a.avg ?? 99) - (b.avg ?? 99));
+    return { choiceId: pick.choiceId, chosen: pick.chosen || null, offered };
+  });
+
   resultsEl.innerHTML = `
     ${renderLobbyBar()}
     ${renderHeroRanking(rows)}
     ${renderTribePriority(tribePriority)}
+    ${renderTrinketPriority(trinketRows)}
     ${renderComps(playable, blocked)}
   `;
 }
@@ -747,6 +794,48 @@ function renderTribePriority(rows){
             <div class="text-right text-[10px] text-[var(--ink-2)] mono">${fmtNum(r.best.dp)} g</div>
           </div>
         `).join('')}
+      </div>
+    </section>`;
+}
+
+function renderTrinketPriority(rows){
+  if (!rows.length) return '';
+  const labelFor = (id) => id === 1 ? 'Lesser' : id === 2 ? 'Greater' : `#${id}`;
+  return `
+    <section>
+      <div class="flex items-baseline justify-between mb-3">
+        <h2 class="label-eyebrow text-[var(--ink-1)]">Trinket öncelik · mid-game</h2>
+        <div class="text-[11px] text-[var(--ink-2)] mono">avg placement · mmr-${state.mmr}</div>
+      </div>
+      <div class="space-y-3">
+        ${rows.map(p => {
+          const winner = p.offered.find(o => o.avg != null) || p.offered[0];
+          return `
+          <div class="rounded-2xl border hairline overflow-hidden bg-[#0f0e18]">
+            <div class="flex items-baseline justify-between px-4 py-2.5 bg-[#11101a]">
+              <div class="text-[12px]"><span class="mono text-[var(--ink-2)] mr-2">${labelFor(p.choiceId)}</span>${p.chosen ? `<span class="text-[10px] mono text-[var(--ink-2)]">seçildi: ${escapeHtml(p.chosen)}</span>` : '<span class="text-[10px] mono text-[var(--ink-2)]">3 seçenek</span>'}</div>
+              <div class="text-[10px] mono text-[var(--ink-2)]">${p.offered.length} offered</div>
+            </div>
+            ${p.offered.map((o,i) => `
+              <div class="grid grid-cols-[28px_36px_1fr_auto_auto] gap-x-3 items-center px-4 py-2.5 ${i?'border-t hairline':''} ${o===winner?'bg-[rgba(243,201,105,.06)]':''}">
+                <div class="mono text-[11px] ${o===winner?'text-[var(--gold)]':'text-[var(--ink-2)]'}">${String(i+1).padStart(2,'0')}</div>
+                <span class="card-chip" data-cid="${escapeHtml(o.cardId)}" data-cname="${escapeHtml(o.name)}">
+                  <img src="https://static.zerotoheroes.com/hearthstone/cardart/tiles/${o.cardId}.png" class="w-9 h-9 rounded object-cover bg-black" onerror="this.style.display='none'">
+                </span>
+                <div class="min-w-0">
+                  <div class="text-[13px] truncate ${o===winner?'font-semibold':''}">${escapeHtml(o.name)}${o===winner?' <span class="text-[10px] mono text-[var(--gold)] px-1.5 py-0.5 border border-[var(--gold-soft)] rounded ml-1">PICK</span>':''}</div>
+                  <div class="text-[10px] text-[var(--ink-2)] mono truncate">${escapeHtml(o.cardId)}${p.chosen===o.cardId?' · seçtin':''}</div>
+                </div>
+                <div class="text-right">
+                  ${o.avg != null
+                    ? `<span class="mono px-2 py-0.5 rounded ${pillColor(o.avg)}">${o.avg.toFixed(2)}</span>`
+                    : `<span class="text-[10px] mono text-[var(--ink-2)]">—</span>`}
+                </div>
+                <div class="text-right text-[10px] text-[var(--ink-2)] mono">${o.dp != null ? fmtNum(o.dp) + ' g' : ''}</div>
+              </div>
+            `).join('')}
+          </div>`;
+        }).join('')}
       </div>
     </section>`;
 }
