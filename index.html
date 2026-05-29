@@ -310,34 +310,55 @@ async function fetchJSON(url){
   return r.json();
 }
 
-document.getElementById('mmr').onchange   = e => state.mmr = +e.target.value;
-document.getElementById('period').onchange= e => state.period = e.target.value;
-
 const analyzeBtn = document.getElementById('analyze');
 const emptyEl = document.getElementById('empty');
 const resultsEl = document.getElementById('results');
 
-analyzeBtn.onclick = async () => {
+// MMR / period dropdowns. Once an analysis exists, changing them updates
+// the view live so the user doesn't have to re-press Analyze:
+//   • period is baked into every feed URL → full refetch
+//   • mmr only changes the hero-stats URL; comp/trinket averages are
+//     selected client-side from averagePlacementAtMmr in render(), so a
+//     mmr change just needs a hero refetch + re-render (heroOnly).
+document.getElementById('mmr').onchange = e => {
+  state.mmr = +e.target.value;
+  if (state.data) analyzeLobby({ heroOnly: true });
+};
+document.getElementById('period').onchange = e => {
+  state.period = e.target.value;
+  if (state.data) analyzeLobby();
+};
+
+analyzeBtn.onclick = () => analyzeLobby();
+
+async function analyzeLobby({ heroOnly = false } = {}){
   const picked = state.heroes.filter(Boolean);
   if (picked.length < 1) { flash(analyzeBtn, 'En az 1 hero seç'); return; }
   if (state.banned.size === 0) { flash(analyzeBtn, 'En az 1 tribe banla'); return; }
 
   analyzeBtn.disabled = true; analyzeBtn.textContent = 'Loading…';
   emptyEl.classList.add('hidden'); resultsEl.classList.remove('hidden');
-  resultsEl.innerHTML = skeleton();
+  // heroOnly refresh keeps the current results on screen (comp/trinket
+  // data is unchanged); only a full run shows the skeleton.
+  if (!heroOnly || !state.comps) resultsEl.innerHTML = skeleton();
 
   try {
-    const [hero, comp, strat, trinket] = await Promise.all([
-      fetchJSON(HERO_STATS_URL(state.mmr, state.period)),
-      fetchJSON(COMP_STATS_URL(state.period)),
-      fetchJSON(COMP_STRATEGIES_URL).catch(()=>[]),
-      fetchJSON(TRINKET_STATS_URL(state.period)).catch(()=>null),
-    ]);
-    state.data = hero; state.comps = comp;
-    state.strategies = Object.fromEntries((strat||[]).filter(s=>s.compId).map(s=>[s.compId, s]));
-    state.trinketStats = trinket && trinket.trinketStats
-      ? Object.fromEntries(trinket.trinketStats.map(t => [t.trinketCardId, t]))
-      : {};
+    const hero = await fetchJSON(HERO_STATS_URL(state.mmr, state.period));
+    state.data = hero;
+
+    if (!heroOnly || !state.comps) {
+      const [comp, strat, trinket] = await Promise.all([
+        fetchJSON(COMP_STATS_URL(state.period)),
+        fetchJSON(COMP_STRATEGIES_URL).catch(()=>[]),
+        fetchJSON(TRINKET_STATS_URL(state.period)).catch(()=>null),
+      ]);
+      state.comps = comp;
+      state.strategies = Object.fromEntries((strat||[]).filter(s=>s.compId).map(s=>[s.compId, s]));
+      state.trinketStats = trinket && trinket.trinketStats
+        ? Object.fromEntries(trinket.trinketStats.map(t => [t.trinketCardId, t]))
+        : {};
+    }
+
     document.getElementById('snapshot').textContent =
       `snapshot ${new Date(hero.lastUpdateDate).toISOString().replace('T',' ').slice(0,16)}Z · ${fmtNum(hero.dataPoints)} games`;
     render();
@@ -346,7 +367,7 @@ analyzeBtn.onclick = async () => {
   } finally {
     analyzeBtn.disabled = false; analyzeBtn.textContent = 'Analyze lobby';
   }
-};
+}
 
 function flash(btn, msg){
   const old = btn.textContent; btn.textContent = msg; btn.classList.add('!bg-[#ff7a8a]');
@@ -434,13 +455,18 @@ function maybeAutoAnalyze(){
   state.autoAnalyzeTimer = setTimeout(() => {
     const heroIds = state.heroes.filter(Boolean).map(h => h.id).sort().join(',');
     const banIds  = [...state.banned].sort().join(',');
-    const sig = heroIds + '|' + banIds;
-    // Validation matches analyzeBtn.onclick — gate the auto-fire on the
-    // same minimum: at least 1 hero AND at least 1 banned tribe.
+    // Include trinket picks in the signature so reaching the Lesser/Greater
+    // trinket screen re-fires the analysis even when heroes + bans are
+    // unchanged. Each pick keyed by its chosen + offered cardIds.
+    const trinketSig = (state.lobbyTrinkets || [])
+      .map(t => (t.chosen || '') + ':' + (t.offered || []).join('.')).join('|');
+    const sig = heroIds + '|' + banIds + '|' + trinketSig;
+    // Validation matches analyzeLobby — gate the auto-fire on the same
+    // minimum: at least 1 hero AND at least 1 banned tribe.
     if (!heroIds || !banIds) return;
     if (sig === state.lastAutoAnalyzedSig) return;       // already analyzed this exact lobby
     state.lastAutoAnalyzedSig = sig;
-    analyzeBtn.click();
+    analyzeLobby();
   }, AUTO_ANALYZE_DEBOUNCE_MS);
 }
 
