@@ -110,15 +110,21 @@ namespace HsDecktrackBgReader
 
                 var heroes = ExtractOfferedHeroes(game);
                 var banned = ExtractBannedTribes(game);
+                var trinkets = ExtractTrinketPicks(game);
 
-                if (heroes.Count == 0 && banned.Count == 0)
+                if (heroes.Count == 0 && banned.Count == 0 && trinkets.Count == 0)
                 {
-                    _dumper?.Write("extract_empty", new { reason = "no heroes and no banned tribes inferred" });
+                    _dumper?.Write("extract_empty", new { reason = "no heroes, no banned tribes, no trinket picks" });
                     return null;
                 }
 
-                _dumper?.Write("extract_ok", new { heroes, banned });
-                return new LobbySnapshot { banned = banned.ToArray(), heroes = heroes.ToArray() };
+                _dumper?.Write("extract_ok", new { heroes, banned, trinkets });
+                return new LobbySnapshot
+                {
+                    banned = banned.ToArray(),
+                    heroes = heroes.ToArray(),
+                    trinkets = trinkets.ToArray(),
+                };
             }
             catch (Exception ex)
             {
@@ -210,6 +216,225 @@ namespace HsDecktrackBgReader
             if (string.IsNullOrEmpty(cardId)) return cardId;
             var m = HeroCanonicalPrefixRegex.Match(cardId);
             return m.Success ? m.Value : cardId;
+        }
+
+        // ──────────────────────────────────────────────────────────────────
+        // TRINKETS
+        //   Source: Core.Game.BattlegroundsTrinketPickStates - a List of
+        //   BattlegroundsTrinketPickState, each with ChoiceId (1=lesser,
+        //   2=greater), Params (a BattlegroundsTrinketPickParams instance
+        //   that carries the offered DbfIds — exact property name is not
+        //   in our spike type catalogue, so we discover it by walking the
+        //   Params object for any int-enumerable property), and
+        //   ChosenTrinketDbfId.
+        // ──────────────────────────────────────────────────────────────────
+
+        private List<TrinketPick> ExtractTrinketPicks(object game)
+        {
+            var result = new List<TrinketPick>();
+            var states = GetMember(game, "BattlegroundsTrinketPickStates") as IEnumerable;
+            if (states == null) return result;
+
+            foreach (var st in states)
+            {
+                if (st == null) continue;
+                var choiceObj = GetMember(st, "ChoiceId");
+                int choiceId = 0;
+                try { if (choiceObj != null) choiceId = Convert.ToInt32(choiceObj); } catch { }
+
+                var chosenObj = GetMember(st, "ChosenTrinketDbfId");
+                string chosen = null;
+                if (chosenObj != null)
+                {
+                    try
+                    {
+                        var dbf = Convert.ToInt32(chosenObj);
+                        if (dbf > 0) chosen = DbfIdToCardId(dbf);
+                    }
+                    catch { }
+                }
+
+                var offered = new List<string>();
+                var paramsObj = GetMember(st, "Params");
+                if (paramsObj != null)
+                {
+                    // Confirmed schema (from HSReplay.dll reflection):
+                    //   BattlegroundsTrinketPickParams.OfferedTrinkets : OfferedTrinket[]
+                    //   OfferedTrinket.TrinketDbfId : int
+                    //   OfferedTrinket.ExtraData : int?
+                    // Read the typed path first; fall back to the generic
+                    // probe only if HSReplay renames things in a future version.
+                    var dbfIds = ReadOfferedTrinketDbfIds(paramsObj);
+                    if (dbfIds == null || dbfIds.Count == 0)
+                        dbfIds = EnumerateIntsFromAnyMember(paramsObj).ToList();
+
+                    foreach (var dbfId in dbfIds)
+                    {
+                        if (dbfId <= 0) continue;
+                        var cardId = DbfIdToCardId(dbfId);
+                        if (!string.IsNullOrEmpty(cardId) && !offered.Contains(cardId))
+                            offered.Add(cardId);
+                    }
+                }
+
+                if (offered.Count == 0 && chosen == null) continue;   // empty pick state
+                result.Add(new TrinketPick { choiceId = choiceId, offered = offered.ToArray(), chosen = chosen });
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Typed read for HSReplay.Requests.BattlegroundsTrinketPickParams.
+        /// Returns null if the schema has drifted so callers can fall through
+        /// to the generic probe.
+        /// </summary>
+        private List<int> ReadOfferedTrinketDbfIds(object paramsObj)
+        {
+            var arr = GetMember(paramsObj, "OfferedTrinkets") as IEnumerable;
+            if (arr == null) return null;
+            var result = new List<int>();
+            foreach (var trinket in arr)
+            {
+                if (trinket == null) continue;
+                var dbf = GetMember(trinket, "TrinketDbfId");
+                if (dbf == null) continue;
+                try { result.Add(Convert.ToInt32(dbf)); } catch { }
+            }
+            if (result.Count > 0) _dumper?.Write("trinket_offered_source", new { from = "Params.OfferedTrinkets[].TrinketDbfId", count = result.Count, ids = result });
+            return result.Count > 0 ? result : null;
+        }
+
+        /// <summary>
+        /// BattlegroundsTrinketPickParams' property name for the offered
+        /// trinkets isn't in our reflection probe. Try common names first;
+        /// if none match, log EVERY int-iterable member found and pick the
+        /// one whose size looks like a real BG offer (>=2). Single-element
+        /// int lists are almost always something else (entity ids, scores) —
+        /// the first real-data run picked one of those and rendered a hero
+        /// p-variant as a "trinket", which is the bug this guards against.
+        /// </summary>
+        private IEnumerable<int> EnumerateIntsFromAnyMember(object source)
+        {
+            if (source == null) yield break;
+
+            var fastPathNames = new[] { "OfferedTrinketDbfIds", "TrinketDbfIds", "Choices", "Options", "Trinkets", "DbfIds", "ChoiceDbfIds", "Cards" };
+            foreach (var name in fastPathNames)
+            {
+                var v = GetMember(source, name);
+                var ids = ToIntList(v);
+                if (ids != null && ids.Count > 0)
+                {
+                    _dumper?.Write("trinket_offered_source", new { from = "params." + name, count = ids.Count, ids });
+                    foreach (var id in ids) yield return id;
+                    yield break;
+                }
+            }
+
+            // No int-iterable matched. Offered trinkets may live as a list
+            // of objects (CardChoice / Card / DbfId-bearing record) instead.
+            // Walk every IEnumerable member and try to pull a DbfId int out
+            // of each item — works for List<Card>, List<{DbfId}>, etc.
+            var t = source.GetType();
+            var allCandidates = new List<TrinketMemberProbe>();
+            var allMembers = new List<MemberInfo>();
+            foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) allMembers.Add(p);
+            foreach (var f in t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) allMembers.Add(f);
+
+            foreach (var m in allMembers)
+            {
+                object v = null;
+                try { v = (m is PropertyInfo pp) ? pp.GetValue(source) : ((FieldInfo)m).GetValue(source); }
+                catch { continue; }
+                if (v == null) continue;
+
+                var prefix = m is PropertyInfo ? "prop:" : "field:";
+                var directInts = ToIntList(v);
+                if (directInts != null)
+                {
+                    allCandidates.Add(new TrinketMemberProbe { name = prefix + m.Name, kind = "int[]", count = directInts.Count, ids = directInts });
+                    continue;
+                }
+                // Try as enumerable of objects → extract DbfId
+                var via = ExtractDbfIdsFromObjectEnumerable(v);
+                if (via.ids != null)
+                {
+                    allCandidates.Add(new TrinketMemberProbe { name = prefix + m.Name, kind = "object[].DbfId", count = via.ids.Count, ids = via.ids, sample = via.sampleType });
+                }
+            }
+            _dumper?.Write("trinket_params_candidates", new { typeName = t.FullName, candidates = allCandidates });
+
+            // Prefer a candidate whose name contains 'trinket', then any
+            // >=2-element list. Single-element lists are almost certainly
+            // not the offer (BG offers 3 trinkets per pick).
+            var winner = allCandidates.FirstOrDefault(c => c.name.IndexOf("trinket", StringComparison.OrdinalIgnoreCase) >= 0 && c.ids.Count >= 2)
+                      ?? allCandidates.FirstOrDefault(c => c.ids.Count >= 2);
+            if (winner != null)
+            {
+                _dumper?.Write("trinket_offered_source", new { from = "params." + winner.name + " (discovered, " + winner.kind + ")", count = winner.ids.Count, ids = winner.ids });
+                foreach (var id in winner.ids) yield return id;
+            }
+            else
+            {
+                _dumper?.Write("trinket_offered_unresolved", new { reason = "no int-iterable or object-iterable yielding >=2 DbfIds" });
+            }
+        }
+
+        private class TrinketMemberProbe
+        {
+            public string name;
+            public string kind;
+            public int count;
+            public List<int> ids;
+            public string sample;   // sample item type when extracting from objects
+        }
+
+        /// <summary>
+        /// If <paramref name="v"/> is IEnumerable&lt;some non-int object&gt;,
+        /// try to pull a numeric DbfId out of each item via a few likely
+        /// property names. Returns null when none of the items expose
+        /// anything int-like, so the caller can move on.
+        /// </summary>
+        private (List<int> ids, string sampleType) ExtractDbfIdsFromObjectEnumerable(object v)
+        {
+            if (v == null || v is string) return (null, null);
+            if (!(v is IEnumerable en)) return (null, null);
+
+            var candidateNames = new[] { "DbfId", "CardDbfId", "Id", "CardId", "TrinketDbfId" };
+            var ids = new List<int>();
+            string sampleType = null;
+            foreach (var item in en)
+            {
+                if (item == null) continue;
+                if (sampleType == null) sampleType = item.GetType().FullName;
+                int? found = null;
+                foreach (var name in candidateNames)
+                {
+                    var prop = GetMember(item, name);
+                    if (prop == null) continue;
+                    try
+                    {
+                        if (prop is int i) { found = i; break; }
+                        if (prop is IConvertible) { found = Convert.ToInt32(prop); break; }
+                    }
+                    catch { }
+                }
+                if (found.HasValue) ids.Add(found.Value);
+            }
+            return ids.Count > 0 ? (ids, sampleType) : (null, sampleType);
+        }
+
+        private static List<int> ToIntList(object v)
+        {
+            if (v == null || v is string) return null;
+            if (!(v is IEnumerable en)) return null;
+            var list = new List<int>();
+            foreach (var item in en)
+            {
+                if (item == null) continue;
+                try { list.Add(Convert.ToInt32(item)); }
+                catch { return null; }    // not a numeric-iterable
+            }
+            return list.Count > 0 ? list : null;
         }
 
         private List<string> HeroesFromEntities(object game)
@@ -591,7 +816,7 @@ namespace HsDecktrackBgReader
 
         private static string SerializeLobby(LobbySnapshot s)
         {
-            var sb = new StringBuilder(128);
+            var sb = new StringBuilder(256);
             sb.Append("{\"banned\":[");
             if (s.banned != null)
                 for (int i = 0; i < s.banned.Length; i++)
@@ -600,22 +825,46 @@ namespace HsDecktrackBgReader
                     sb.Append(s.banned[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
                 }
             sb.Append("],\"heroes\":[");
-            if (s.heroes != null)
-                for (int i = 0; i < s.heroes.Length; i++)
+            if (s.heroes != null) AppendStringArray(sb, s.heroes);
+            sb.Append("],\"trinkets\":[");
+            if (s.trinkets != null)
+            {
+                for (int i = 0; i < s.trinkets.Length; i++)
                 {
                     if (i > 0) sb.Append(',');
-                    var h = s.heroes[i] ?? "";
-                    sb.Append('"');
-                    foreach (var c in h)
-                    {
-                        if (c == '\\' || c == '"') sb.Append('\\').Append(c);
-                        else if (c < 0x20) sb.Append("\\u").Append(((int)c).ToString("x4"));
-                        else sb.Append(c);
-                    }
-                    sb.Append('"');
+                    var t = s.trinkets[i];
+                    sb.Append("{\"choiceId\":").Append(t.choiceId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append(",\"offered\":[");
+                    if (t.offered != null) AppendStringArray(sb, t.offered);
+                    sb.Append("],\"chosen\":");
+                    if (t.chosen == null) sb.Append("null");
+                    else { sb.Append('"'); AppendJsonStringChars(sb, t.chosen); sb.Append('"'); }
+                    sb.Append('}');
                 }
+            }
             sb.Append("]}");
             return sb.ToString();
+        }
+
+        private static void AppendStringArray(StringBuilder sb, string[] arr)
+        {
+            for (int i = 0; i < arr.Length; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append('"');
+                AppendJsonStringChars(sb, arr[i] ?? "");
+                sb.Append('"');
+            }
+        }
+
+        private static void AppendJsonStringChars(StringBuilder sb, string s)
+        {
+            foreach (var c in s)
+            {
+                if (c == '\\' || c == '"') sb.Append('\\').Append(c);
+                else if (c < 0x20) sb.Append("\\u").Append(((int)c).ToString("x4"));
+                else sb.Append(c);
+            }
         }
     }
 
@@ -623,5 +872,13 @@ namespace HsDecktrackBgReader
     {
         public int[] banned { get; set; }
         public string[] heroes { get; set; }
+        public TrinketPick[] trinkets { get; set; }
+    }
+
+    internal class TrinketPick
+    {
+        public int choiceId { get; set; }
+        public string[] offered { get; set; }
+        public string chosen { get; set; }
     }
 }

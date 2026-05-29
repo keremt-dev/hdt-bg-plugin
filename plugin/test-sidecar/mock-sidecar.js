@@ -11,9 +11,19 @@ const http = require('http');
 
 const CANNED = [
   null,                                                          // first 2s: no lobby yet (204)
-  { banned: [14, 23],         heroes: ['TB_BaconShop_HERO_36'] },
-  { banned: [14, 23, 17],     heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43'] },
-  { banned: [14, 23, 17, 28], heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43', 'BG31_HERO_802', 'BG22_HERO_001'] },
+  { banned: [14, 23],         heroes: ['TB_BaconShop_HERO_36'], trinkets: [] },
+  { banned: [14, 23, 17],     heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43'], trinkets: [] },
+  { banned: [14, 23, 17, 28], heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43', 'BG31_HERO_802', 'BG22_HERO_001'],
+    trinkets: [
+      // Real trinketCardIds (high-data-points) so the mock exercises the
+      // name + avg-placement lookup against the live trinket-stats feed.
+      { choiceId: 1, chosen: null, offered: ['BG30_MagicItem_847', 'BG30_MagicItem_891', 'BG30_MagicItem_426t'] },
+    ] },
+  { banned: [14, 23, 17, 28, 11], heroes: ['TB_BaconShop_HERO_36', 'TB_BaconShop_HERO_43', 'BG31_HERO_802', 'BG22_HERO_001'],
+    trinkets: [
+      { choiceId: 1, chosen: 'BG30_MagicItem_847', offered: ['BG30_MagicItem_847', 'BG30_MagicItem_891', 'BG30_MagicItem_426t'] },
+      { choiceId: 2, chosen: null,                 offered: ['BG35_MagicItem_840', 'BG35_MagicItem_931t', 'BG30_MagicItem_888'] },
+    ] },
 ];
 
 let tick = 0;
